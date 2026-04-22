@@ -1,0 +1,2 @@
+DATABASE=Comply
+PASSWORD=Quality&Compliance2026
