@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+{% block title %}Documents{% endblock %}
+
+{% block content %}
+<div class="page-header d-flex align-items-center justify-content-between">
+  <h1><i class="bi bi-file-earmark-pdf me-2"></i>Generated Documents</h1>
+  <a href="/documents/generate" class="btn btn-primary btn-sm">
+    <i class="bi bi-plus-circle me-1"></i>Generate New
+  </a>
+</div>
+
+<div class="card">
+  <div class="card-body p-0">
+    {% if docs %}
+    <div class="table-responsive">
+      <table class="table table-hover table-sm align-middle mb-0">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Part Number</th>
+            <th>Document Type</th>
+            <th>Customer</th>
+            <th>Generated</th>
+            <th class="text-end">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for doc in docs %}
+          <tr>
+            <td class="text-muted small">{{ doc.id }}</td>
+            <td>
+              <a href="/parts/{{ doc.part_id }}" class="fw-semibold text-decoration-none"
+                 style="color:var(--brand-dark)">{{ doc.part_number }}</a>
+            </td>
+            <td>
+              {% if 'Combined' in doc.doc_type %}
+                <span class="badge bg-primary">{{ doc.doc_type }}</span>
+              {% elif doc.doc_type == 'RoHS' %}
+                <span class="badge" style="background:#16a34a">{{ doc.doc_type }}</span>
+              {% elif doc.doc_type == 'REACH' %}
+                <span class="badge" style="background:#2563a8">{{ doc.doc_type }}</span>
+              {% elif doc.doc_type == 'PFAS' %}
+                <span class="badge" style="background:#7c3aed">{{ doc.doc_type }}</span>
+              {% else %}
+                <span class="badge bg-secondary">{{ doc.doc_type }}</span>
+              {% endif %}
+            </td>
+            <td class="text-muted">{{ doc.customer or '—' }}</td>
+            <td class="text-muted small">{{ doc.generated_at[:16].replace('T', ' ') }}</td>
+            <td class="text-end">
+              <div class="d-flex gap-1 justify-content-end">
+                <a href="/documents/{{ doc.id }}/download"
+                   class="btn btn-outline-primary btn-sm" title="Download PDF">
+                  <i class="bi bi-download"></i>
+                </a>
+                <form method="post" action="/documents/{{ doc.id }}/delete"
+                      onsubmit="return confirm('Delete this document?')">
+                  <button type="submit" class="btn btn-outline-danger btn-sm" title="Delete">
+                    <i class="bi bi-trash"></i>
+                  </button>
+                </form>
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="px-3 py-2 text-muted small border-top">
+      {{ docs|length }} document(s) total
+    </div>
+    {% else %}
+    <div class="text-center py-5 text-muted">
+      <i class="bi bi-file-earmark-pdf fs-1 d-block mb-2 opacity-25"></i>
+      No documents generated yet.
+      <a href="/documents/generate">Generate your first document.</a>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
