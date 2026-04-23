@@ -1,0 +1,130 @@
+{% extends "base.html" %}
+{% block title %}Parts{% endblock %}
+
+{% macro status_badge(val) %}
+  {% if val in ['Compliant','PFAS-Free'] %}<span class="badge badge-compliant rounded-pill">{{ val }}</span>
+  {% elif val in ['Needs Review'] %}<span class="badge badge-review rounded-pill">{{ val }}</span>
+  {% elif val in ['Non-Compliant','Contains SVHC','Contains PFAS','Contains ODS'] %}<span class="badge badge-noncompliant rounded-pill">{{ val }}</span>
+  {% elif val == 'Exempt' %}<span class="badge badge-exempt rounded-pill">{{ val }}</span>
+  {% else %}<span class="badge badge-unknown rounded-pill">{{ val or 'Unknown' }}</span>
+  {% endif %}
+{% endmacro %}
+
+{% block content %}
+<div class="page-header">
+  <h1><i class="bi bi-boxes me-2"></i>Parts <span class="text-muted fw-normal fs-6">({{ total_count }} total)</span></h1>
+</div>
+
+<!-- Filters -->
+<div class="card mb-3">
+  <div class="card-body py-2 px-3">
+    <form method="get" class="row g-2 align-items-end">
+      <div class="col-12 col-md-4">
+        <input type="text" name="search" class="form-control form-control-sm"
+               placeholder="Search part number or description…" value="{{ search }}"/>
+      </div>
+      <div class="col-6 col-md-3">
+        <select name="cls" class="form-select form-select-sm">
+          <option value="">All Classes</option>
+          {% for c in classes %}
+          <option {% if cls_f==c.part_class %}selected{% endif %} value="{{ c.part_class }}">{{ c.part_class }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-6 col-md-3">
+        <div class="d-flex gap-1">
+          <button type="submit" class="btn btn-primary btn-sm w-100">Filter</button>
+          <a href="/parts" class="btn btn-outline-secondary btn-sm">✕</a>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-body p-0">
+    {% if parts %}
+    <div class="table-responsive">
+      <table class="table table-hover table-sm align-middle mb-0">
+        <thead>
+          <tr>
+            <th>Part Number</th>
+            <th>Description</th>
+            <th>Class</th>
+            <th class="text-center">RoHS</th>
+            <th class="text-center">REACH</th>
+            <th class="text-center">PFAS</th>
+            <th class="text-center">Montreal</th>
+            <th class="text-center">BOM</th>
+            <th class="text-center">FMD</th>
+            <th><span class="visually-hidden">Actions</span></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for p in parts %}
+          <tr>
+            <td>
+              <a href="/parts/{{ p.part_number }}" class="fw-semibold text-decoration-none" style="color:var(--brand-dark)">
+                {{ p.part_number }}
+              </a>
+            </td>
+            <td class="text-muted text-xs">{{ (p.description or '')[:45] }}{% if p.description and p.description|length > 45 %}…{% endif %}</td>
+            <td class="text-xs text-muted">{{ p.part_class or '—' }}</td>
+            <td class="text-center">{{ status_badge(p.rohs_status) }}</td>
+            <td class="text-center">{{ status_badge(p.reach_status) }}</td>
+            <td class="text-center">{{ status_badge(p.pfas_status) }}</td>
+            <td class="text-center">{{ status_badge(p.montreal_status) }}</td>
+            <td class="text-center">
+              {% if p.has_bom %}
+                <i class="bi bi-check-circle text-success"></i>
+              {% else %}
+                <i class="bi bi-dash text-muted"></i>
+              {% endif %}
+            </td>
+            <td class="text-center">
+              {% if p.has_fmd %}
+                <i class="bi bi-check-circle text-success"></i>
+              {% else %}
+                <i class="bi bi-dash text-muted"></i>
+              {% endif %}
+            </td>
+            <td>
+              <a href="/parts/{{ p.part_number }}" class="btn btn-outline-secondary btn-sm" aria-label="View part details">
+                <i class="bi bi-eye"></i>
+              </a>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Pagination -->
+    {% if total_pages > 1 %}
+    <nav class="px-3 py-2 border-top">
+      <ul class="pagination pagination-sm mb-0">
+        {% if page > 1 %}
+        <li class="page-item"><a class="page-link" href="?page={{ page-1 }}&search={{ search }}&cls={{ cls_f }}">‹</a></li>
+        {% endif %}
+        {% for pg in range([1, page-2]|max, [total_pages+1, page+3]|min) %}
+        <li class="page-item {% if pg==page %}active{% endif %}">
+          <a class="page-link" href="?page={{ pg }}&search={{ search }}&cls={{ cls_f }}">{{ pg }}</a>
+        </li>
+        {% endfor %}
+        {% if page < total_pages %}
+        <li class="page-item"><a class="page-link" href="?page={{ page+1 }}&search={{ search }}&cls={{ cls_f }}">›</a></li>
+        {% endif %}
+      </ul>
+    </nav>
+    {% endif %}
+
+    {% else %}
+    <div class="text-center py-5 text-muted">
+      <i class="bi bi-boxes fs-1 d-block mb-2 opacity-25"></i>
+      No parts found.
+      {% if search or cls_f %}<a href="/parts">Clear filters</a>{% else %}<a href="/import">Import parts to get started.</a>{% endif %}
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

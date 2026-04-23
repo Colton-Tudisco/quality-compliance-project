@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% block title %}Documents{% endblock %}
+{% block content %}
+
+<div class="page-header">
+  <h1><i class="bi bi-file-earmark-pdf me-2"></i>Generated Documents</h1>
+  <a href="/documents/generate" class="btn btn-primary btn-sm">
+    <i class="bi bi-plus-circle me-1"></i>Generate New
+  </a>
+</div>
+
+<div class="card">
+  <div class="card-body p-0">
+    {% if docs %}
+    <div class="table-responsive">
+      <table class="table table-hover table-sm align-middle mb-0">
+        <thead>
+          <tr>
+            <th>Standard</th>
+            <th>Customer</th>
+            <th>Parts</th>
+            <th>Company</th>
+            <th>Generated</th>
+            <th class="text-end">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for d in docs %}
+          <tr>
+            <td><span class="badge bg-primary">{{ d.doc_type }}</span></td>
+            <td class="text-muted">{{ d.customer or '—' }}</td>
+            <td>
+              <span class="badge bg-secondary me-1">{{ d.part_count }}</span>
+              <span class="text-xs text-muted">{{ (d.parts_list or '')[:60] }}{% if d.parts_list and d.parts_list|length > 60 %}…{% endif %}</span>
+            </td>
+            <td class="text-muted text-xs">{{ d.company or '—' }}</td>
+            <td class="text-muted text-xs">{{ d.generated_at[:16].replace('T',' ') }}</td>
+            <td class="text-end">
+              <div class="d-flex gap-1 justify-content-end">
+                <a href="/documents/{{ d.id }}/download"
+                   class="btn btn-outline-primary btn-sm" title="Download">
+                  <i class="bi bi-download"></i>
+                </a>
+                <form method="post" action="/documents/{{ d.id }}/delete"
+                      onsubmit="return confirm('Delete this document?')">
+                  <button type="submit" class="btn btn-outline-danger btn-sm">
+                    <i class="bi bi-trash"></i>
+                  </button>
+                </form>
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="px-3 py-2 border-top text-muted text-xs">{{ docs|length }} document(s)</div>
+    {% else %}
+    <div class="text-center py-5 text-muted">
+      <i class="bi bi-file-earmark-pdf fs-1 d-block mb-2 opacity-25"></i>
+      No documents yet. <a href="/documents/generate">Generate your first declaration.</a>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

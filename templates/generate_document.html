@@ -1,0 +1,198 @@
+{% extends "base.html" %}
+{% block title %}Generate Document{% endblock %}
+
+{% macro status_badge(val) %}
+  {% if val in ['Compliant','PFAS-Free'] %}<span class="badge badge-compliant rounded-pill">{{ val }}</span>
+  {% elif val == 'Needs Review' %}<span class="badge badge-review rounded-pill">{{ val }}</span>
+  {% elif val in ['Non-Compliant','Contains SVHC','Contains PFAS','Contains ODS'] %}<span class="badge badge-noncompliant rounded-pill">{{ val }}</span>
+  {% else %}<span class="badge badge-unknown rounded-pill">{{ val or '?' }}</span>
+  {% endif %}
+{% endmacro %}
+
+{% block content %}
+<div class="page-header">
+  <h1><i class="bi bi-file-earmark-plus me-2"></i>Generate Compliance Declaration</h1>
+</div>
+
+<form method="post" id="genForm">
+<div class="row g-3">
+
+  <!-- Left: Part selection -->
+  <div class="col-12 col-lg-8">
+    <div class="card">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <span>Select Parts</span>
+        <div class="d-flex gap-2 align-items-center">
+          <input type="text" id="partSearch" class="form-control form-control-sm"
+                 placeholder="Filter parts…" style="width:200px"/>
+          <span id="selectedCount" class="badge bg-primary">0 selected</span>
+        </div>
+      </div>
+      <div class="card-body p-0" style="max-height:460px; overflow-y:auto;">
+        {% if parts %}
+        <table class="table table-sm table-hover align-middle mb-0" id="partsTable">
+          <thead style="position:sticky;top:0;z-index:1;">
+            <tr>
+              <th style="width:36px;">
+                <input type="checkbox" id="selectAll" class="form-check-input"/>
+              </th>
+              <th>Part Number</th>
+              <th>Description</th>
+              <th class="text-center">RoHS</th>
+              <th class="text-center">REACH</th>
+              <th class="text-center">PFAS</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for p in parts %}
+            <tr class="part-row" data-pn="{{ p.part_number }}" data-desc="{{ p.description or '' }}">
+              <td>
+                <input type="checkbox" name="part_numbers" value="{{ p.part_number }}"
+                       class="form-check-input part-cb"/>
+              </td>
+              <td class="fw-semibold text-xs">{{ p.part_number }}</td>
+              <td class="text-xs text-muted">{{ (p.description or '')[:45] }}</td>
+              <td class="text-center">{{ status_badge(p.rohs_status) }}</td>
+              <td class="text-center">{{ status_badge(p.reach_status) }}</td>
+              <td class="text-center">{{ status_badge(p.pfas_status) }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        {% else %}
+        <div class="text-center py-5 text-muted">
+          <i class="bi bi-boxes fs-1 d-block mb-2 opacity-25"></i>
+          No parts available. <a href="/import">Import data first.</a>
+        </div>
+        {% endif %}
+      </div>
+      <div class="card-footer py-2 px-3 d-flex justify-content-between align-items-center">
+        <span class="text-muted text-xs">{{ parts|length }} parts available</span>
+        <button type="button" id="clearSelection" class="btn btn-outline-secondary btn-sm">Clear Selection</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Right: Document settings -->
+  <div class="col-12 col-lg-4">
+    <div class="card mb-3">
+      <div class="card-header">Document Settings</div>
+      <div class="card-body">
+        <div class="mb-3">
+          <label class="form-label fw-semibold small">Standard <span class="text-danger">*</span></label>
+          <select name="doc_type" class="form-select form-select-sm" required>
+            {% for t in doc_types %}
+            <option>{{ t }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="mb-3">
+          <label class="form-label fw-semibold small">Customer / Recipient</label>
+          <input type="text" name="customer" class="form-control form-control-sm"
+                 placeholder="Who is this declaration for?"/>
+        </div>
+        <div class="mb-3">
+          <label class="form-label fw-semibold small">Authorized Signatory</label>
+          <input type="text" name="signatory" class="form-control form-control-sm"
+                 placeholder="Full name of signer"/>
+        </div>
+        <div class="mb-3">
+          <label class="form-label fw-semibold small">Company</label>
+          <input type="text" name="company" class="form-control form-control-sm"
+                 value="Schlegel Electronic Materials"/>
+        </div>
+
+        <div id="selectionSummary" class="alert alert-light py-2 small mb-3" style="display:none;">
+          <strong id="summaryCount">0</strong> part(s) selected
+          <div id="summaryList" class="text-muted text-xs mt-1" style="max-height:80px;overflow-y:auto;"></div>
+        </div>
+
+        <button type="submit" class="btn btn-primary w-100" id="generateBtn" disabled>
+          <i class="bi bi-file-earmark-pdf me-1"></i>Generate Declaration
+        </button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">Standard Guide</div>
+      <div class="card-body p-3" style="font-size:.8rem;">
+        <div class="mb-2"><span class="fw-semibold text-primary">RoHS</span> — EU Dir. 2011/65/EU. Restricts 10 hazardous substances in electrical equipment.</div>
+        <div class="mb-2"><span class="fw-semibold text-primary">REACH</span> — EC 1907/2006. Requires SVHC disclosure above 0.1% w/w.</div>
+        <div class="mb-2"><span class="fw-semibold text-primary">PFAS</span> — Declaration that product does not intentionally contain per/polyfluoroalkyl substances.</div>
+        <div class="mb-2"><span class="fw-semibold text-primary">Montreal Protocol</span> — ODS (ozone depleting substances) declaration.</div>
+        <div><span class="fw-semibold text-primary">Combined</span> — All four standards in one document.</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+</form>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const checkboxes   = document.querySelectorAll('.part-cb');
+const selectAll    = document.getElementById('selectAll');
+const clearBtn     = document.getElementById('clearSelection');
+const countBadge   = document.getElementById('selectedCount');
+const genBtn       = document.getElementById('generateBtn');
+const summary      = document.getElementById('selectionSummary');
+const summaryCount = document.getElementById('summaryCount');
+const summaryList  = document.getElementById('summaryList');
+const searchInput  = document.getElementById('partSearch');
+
+function updateUI() {
+  const checked = [...checkboxes].filter(c => c.checked);
+  const n = checked.length;
+  countBadge.textContent = n + ' selected';
+  genBtn.disabled = n === 0;
+  if (n > 0) {
+    summary.style.display = 'block';
+    summaryCount.textContent = n;
+    summaryList.innerHTML = checked.map(c => {
+      const row = c.closest('tr');
+      return `<span class="me-2">• ${row.dataset.pn}</span>`;
+    }).join('');
+  } else {
+    summary.style.display = 'none';
+  }
+}
+
+checkboxes.forEach(cb => cb.addEventListener('change', updateUI));
+
+selectAll.addEventListener('change', function() {
+  const visibleRows = [...document.querySelectorAll('.part-row')]
+    .filter(r => r.style.display !== 'none');
+  visibleRows.forEach(r => {
+    const cb = r.querySelector('.part-cb');
+    if (cb) cb.checked = this.checked;
+  });
+  updateUI();
+});
+
+clearBtn.addEventListener('click', function() {
+  checkboxes.forEach(cb => cb.checked = false);
+  selectAll.checked = false;
+  updateUI();
+});
+
+searchInput.addEventListener('input', function() {
+  const q = this.value.toLowerCase();
+  document.querySelectorAll('.part-row').forEach(row => {
+    const match = row.dataset.pn.toLowerCase().includes(q) ||
+                  row.dataset.desc.toLowerCase().includes(q);
+    row.style.display = match ? '' : 'none';
+  });
+});
+
+// Pre-select part from URL
+const urlParams = new URLSearchParams(window.location.search);
+const preSelect = urlParams.get('part');
+if (preSelect) {
+  checkboxes.forEach(cb => {
+    if (cb.value === preSelect) cb.checked = true;
+  });
+  updateUI();
+}
+</script>
+{% endblock %}

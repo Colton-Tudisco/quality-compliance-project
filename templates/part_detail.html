@@ -1,0 +1,218 @@
+{% extends "base.html" %}
+{% block title %}{{ part.part_number }}{% endblock %}
+
+{% macro status_badge(val) %}
+  {% if val in ['Compliant','PFAS-Free'] %}<span class="badge badge-compliant rounded-pill px-2 py-1"><i class="bi bi-check-circle me-1"></i>{{ val }}</span>
+  {% elif val == 'Needs Review' %}<span class="badge badge-review rounded-pill px-2 py-1"><i class="bi bi-exclamation-circle me-1"></i>{{ val }}</span>
+  {% elif val in ['Non-Compliant','Contains SVHC','Contains PFAS','Contains ODS'] %}<span class="badge badge-noncompliant rounded-pill px-2 py-1"><i class="bi bi-x-circle me-1"></i>{{ val }}</span>
+  {% elif val == 'Exempt' %}<span class="badge badge-exempt rounded-pill px-2 py-1">{{ val }}</span>
+  {% else %}<span class="badge badge-unknown rounded-pill px-2 py-1"><i class="bi bi-question-circle me-1"></i>{{ val or 'Unknown' }}</span>
+  {% endif %}
+{% endmacro %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1><i class="bi bi-boxes me-2"></i>{{ part.part_number }}</h1>
+    <p class="text-muted mb-0">{{ part.description or 'No description' }}</p>
+  </div>
+  <div class="d-flex gap-2">
+    {% if not part.is_traded %}
+    <a href="/documents/generate?part={{ part.part_number }}" class="btn btn-primary btn-sm">
+      <i class="bi bi-file-earmark-plus me-1"></i>Generate Doc
+    </a>
+    {% endif %}
+    <a href="/parts" class="btn btn-outline-secondary btn-sm">← Back</a>
+  </div>
+</div>
+
+<div class="row g-3 mb-3">
+  <!-- Part info -->
+  <div class="col-12 col-md-4">
+    <div class="card h-100">
+      <div class="card-header">Part Details</div>
+      <div class="card-body">
+        <dl class="row mb-0" style="font-size:.87rem;">
+          <dt class="col-5 text-muted">Part #</dt>
+          <dd class="col-7 fw-semibold">{{ part.part_number }}</dd>
+          <dt class="col-5 text-muted">Class</dt>
+          <dd class="col-7">{{ part.part_class or '—' }}</dd>
+          <dt class="col-5 text-muted">Type</dt>
+          <dd class="col-7">{{ 'Manufactured' if part.part_type=='M' else 'Purchased' if part.part_type=='P' else part.part_type or '—' }}</dd>
+          <dt class="col-5 text-muted">Group</dt>
+          <dd class="col-7">{{ part.product_group or '—' }}</dd>
+          <dt class="col-5 text-muted">UOM</dt>
+          <dd class="col-7">{{ part.uom or '—' }}</dd>
+          <dt class="col-5 text-muted">HS Code</dt>
+          <dd class="col-7">{{ part.commodity_code or '—' }}</dd>
+          <dt class="col-5 text-muted">BOM</dt>
+          <dd class="col-7">{% if part.has_bom %}<span class="text-success fw-semibold">Yes</span>{% else %}<span class="text-muted">No</span>{% endif %}</dd>
+        </dl>
+      </div>
+    </div>
+  </div>
+
+  <!-- Compliance status cards -->
+  {% set standards = [
+    ('RoHS',             'rohs',     '2011/65/EU + 2015/863'),
+    ('REACH',            'reach',    'EC 1907/2006 — SVHC'),
+    ('PFAS',             'pfas',     'PFAS-Free Declaration'),
+    ('Montreal Protocol','montreal', 'ODS Declaration'),
+  ] %}
+  {% for std_name, key, ref in standards %}
+  {% set s = status_map.get(std_name) %}
+  <div class="col-6 col-md-2">
+    <div class="card h-100 text-center">
+      <div class="card-header" style="font-size:.75rem; padding:.4rem .6rem">{{ std_name }}</div>
+      <div class="card-body d-flex flex-column align-items-center justify-content-center py-3">
+        <div class="mb-1">{{ status_badge(s.status if s else None) }}</div>
+        <div class="text-muted text-xs mt-1">{{ ref }}</div>
+        {% if s and s.notes %}
+        <div class="text-xs mt-2 text-start" style="color:#374151">{{ s.notes }}</div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
+<!-- Compliance gaps -->
+{% if gaps %}
+<div class="card mb-3">
+  <div class="card-header"><i class="bi bi-exclamation-triangle me-1"></i>Compliance Gaps</div>
+  <div class="card-body p-2">
+    {% for g in gaps %}
+    <div class="p-2 mb-1 rounded {% if g.required %}gap-required{% else %}gap-suggested{% endif %}">
+      <div class="d-flex align-items-start gap-2">
+        {% if g.required %}
+          <span class="badge bg-danger mt-1">Required</span>
+        {% else %}
+          <span class="badge bg-warning text-dark mt-1">Suggested</span>
+        {% endif %}
+        <div>
+          <strong>{{ g.standard }}</strong> — {{ g.reason }}
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+<!-- BOM -->
+{% if bom %}
+<div class="card mb-3">
+  <div class="card-header"><i class="bi bi-layers me-1"></i>Bill of Materials (Direct Components)</div>
+  <div class="card-body p-0">
+    <div class="table-responsive">
+      <table class="table table-sm table-hover mb-0">
+        <thead>
+          <tr>
+            <th>Material Part</th>
+            <th>Description</th>
+            <th>Series</th>
+            <th>Supplier</th>
+            <th>Qty/Parent</th>
+            <th class="text-center">Risk</th>
+            <th class="text-center">Flags</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for b in bom %}
+          <tr>
+            <td class="fw-semibold text-xs">{{ b.material_part }}</td>
+            <td class="text-xs text-muted">{{ (b.mat_desc or '')[:50] }}</td>
+            <td class="text-xs">{{ b.series_desc or b.material_series or '—' }}</td>
+            <td class="text-xs text-muted">{{ b.primary_supplier or '—' }}</td>
+            <td class="text-xs">{{ b.qty_per_parent }} {{ b.uom }}</td>
+            <td class="text-center">
+              {% if b.risk_level == 'High' %}<span class="risk-dot risk-high"></span>High
+              {% elif b.risk_level == 'Medium' %}<span class="risk-dot risk-medium"></span>Med
+              {% elif b.risk_level == 'Low' %}<span class="risk-dot risk-low"></span>Low
+              {% else %}<span class="risk-dot risk-unknown"></span>—
+              {% endif %}
+            </td>
+            <td class="text-center">
+              {% if b.pfas_flag %}<span class="badge flag-pfas rounded-pill me-1">PFAS</span>{% endif %}
+              {% if b.svhc_flag %}<span class="badge flag-svhc rounded-pill me-1">SVHC</span>{% endif %}
+              {% if b.ods_flag %}<span class="badge flag-ods rounded-pill me-1">ODS</span>{% endif %}
+              {% if b.rohs_flag %}<span class="badge flag-rohs rounded-pill me-1">RoHS</span>{% endif %}
+              {% if not b.pfas_flag and not b.svhc_flag and not b.ods_flag and not b.rohs_flag %}
+                <span class="text-muted text-xs">—</span>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+<!-- Documents -->
+ <div class="card mb-3">
+  <div class="card-header d-flex justify-content-between align-items-center">
+    <span><i class="bi bi-file-earmark-text me-1"></i>Full Material Declaration (IPC-1752A)</span>
+    {% if fmd %}
+      <span class="badge bg-success">On File</span>
+    {% endif %}
+  </div>
+  <div class="card-body">
+    {% if fmd %}
+    <div class="d-flex align-items-center justify-content-between mb-3">
+      <div>
+        <div class="fw-semibold">{{ fmd.filename }}</div>
+        <div class="text-muted text-xs">Uploaded: {{ fmd.uploaded_at[:16].replace('T',' ') }}</div>
+      </div>
+      <a href="/parts/{{ part.part_number }}/fmd/download"
+         class="btn btn-outline-primary btn-sm">
+        <i class="bi bi-download me-1"></i>Download
+      </a>
+    </div>
+    <hr class="my-2"/>
+    <p class="text-muted small mb-2">Replace existing FMD:</p>
+    {% else %}
+    <p class="text-muted small mb-2">No FMD on file. Upload one below:</p>
+    {% endif %}
+
+    <form method="post" action="/parts/{{ part.part_number }}/fmd/upload"
+          enctype="multipart/form-data" class="d-flex gap-2 align-items-center">
+      <input type="file" name="fmd_file" class="form-control form-control-sm"/>
+      <button type="submit" class="btn btn-primary btn-sm" style="white-space:nowrap">
+        <i class="bi bi-upload me-1"></i>{{ 'Replace FMD' if fmd else 'Upload FMD' }}
+      </button>
+    </form>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header d-flex justify-content-between">
+    <span><i class="bi bi-file-earmark-pdf me-1"></i>Generated Documents</span>
+    <a href="/documents/generate?part={{ part.part_number }}">Generate new</a>
+  </div>
+  <div class="card-body p-0">
+    {% if docs %}
+    <table class="table table-sm table-hover mb-0">
+      <thead><tr><th>Type</th><th>Customer</th><th>Generated</th><th><span class="visually-hidden">Actions</span></th></tr></thead>
+      <tbody>
+        {% for d in docs %}
+        <tr>
+          <td><span class="badge bg-primary">{{ d.doc_type }}</span></td>
+          <td class="text-muted">{{ d.customer or '—' }}</td>
+          <td class="text-muted text-xs">{{ d.generated_at[:16].replace('T',' ') }}</td>
+          <td class="text-end">
+            <a href="/documents/{{ d.id }}/download" class="btn btn-outline-primary btn-sm" aria-label="Download Document">
+              <i class="bi bi-download"></i>
+            </a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="text-muted p-3 mb-0">No documents yet. <a href="/documents/generate?part={{ part.part_number }}">Generate one.</a></p>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

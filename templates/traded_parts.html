@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block title %}Traded Parts{% endblock %}
+{% block content %}
+
+<div class="page-header">
+  <div>
+    <h1><i class="bi bi-arrow-left-right me-2"></i>Traded / Intercompany Parts</h1>
+    <p class="text-muted mb-0 small">Parts sourced from Schlegel Asia or Dongguan — no BOM available, document generation not yet supported.</p>
+  </div>
+</div>
+
+<div class="alert alert-warning d-flex gap-2 align-items-start py-2">
+  <i class="bi bi-info-circle-fill mt-1"></i>
+  <div>
+    These parts are purchased from <strong>Schlegel Electronic Materials Asia Limited</strong> or
+    <strong>Schlegel (Dongguan) Electronics Limited</strong> as finished goods.
+    Because no BOM exists for them in this system, compliance document generation is currently unavailable.
+    Once supplier compliance data is received from the intercompany source, these parts can be enabled.
+  </div>
+</div>
+
+<!-- Search -->
+<div class="card mb-3">
+  <div class="card-body py-2 px-3">
+    <form method="get" class="d-flex gap-2">
+      <input type="text" name="search" class="form-control form-control-sm"
+             placeholder="Search part number or description…" value="{{ search }}" style="max-width:320px"/>
+      <button type="submit" class="btn btn-primary btn-sm">Search</button>
+      {% if search %}<a href="/parts/traded" class="btn btn-outline-secondary btn-sm">✕</a>{% endif %}
+    </form>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-body p-0">
+    {% if parts %}
+    <div class="table-responsive">
+      <table class="table table-sm table-hover align-middle mb-0">
+        <thead>
+          <tr>
+            <th>Part Number</th>
+            <th>Description</th>
+            <th>Class</th>
+            <th>Source Vendor</th>
+            <th class="text-center">Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for p in parts %}
+          <tr>
+            <td class="fw-semibold text-xs">{{ p.part_number }}</td>
+            <td class="text-muted text-xs">{{ (p.description or '')[:55] }}</td>
+            <td class="text-xs text-muted">{{ p.part_class or '—' }}</td>
+            <td class="text-xs text-muted">{{ p.traded_vendor or '—' }}</td>
+            <td class="text-center">
+              <span class="badge badge-traded rounded-pill">No BOM</span>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="px-3 py-2 border-top text-muted text-xs">{{ parts|length }} traded part(s)</div>
+    {% else %}
+    <div class="text-center py-5 text-muted">
+      <i class="bi bi-arrow-left-right fs-1 d-block mb-2 opacity-25"></i>
+      No traded parts found. {% if search %}<a href="/parts/traded">Clear search</a>{% endif %}
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

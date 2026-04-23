@@ -1,0 +1,118 @@
+{% extends "base.html" %}
+{% block title %}Materials{% endblock %}
+{% block content %}
+
+<div class="page-header">
+  <h1><i class="bi bi-layers me-2"></i>Raw Materials <span class="text-muted fw-normal fs-6">({{ total_count }} total)</span></h1>
+</div>
+
+<div class="card mb-3">
+  <div class="card-body py-2 px-3">
+    <form method="get" class="row g-2 align-items-end">
+      <div class="col-12 col-md-4">
+        <input type="text" name="search" class="form-control form-control-sm"
+               placeholder="Part number, description, or supplier…" value="{{ search }}"/>
+      </div>
+      <div class="col-6 col-md-2">
+        <select name="risk" class="form-select form-select-sm">
+          <option value="">All Risk Levels</option>
+          <option {% if risk_f=='High' %}selected{% endif %} value="High">High</option>
+          <option {% if risk_f=='Medium' %}selected{% endif %} value="Medium">Medium</option>
+          <option {% if risk_f=='Low' %}selected{% endif %} value="Low">Low</option>
+          <option {% if risk_f=='Unknown' %}selected{% endif %} value="Unknown">Unknown</option>
+        </select>
+      </div>
+      <div class="col-6 col-md-2">
+        <select name="flag" class="form-select form-select-sm">
+          <option value="">All Flags</option>
+          <option {% if flag_f=='pfas' %}selected{% endif %} value="pfas">PFAS Flagged</option>
+          <option {% if flag_f=='svhc' %}selected{% endif %} value="svhc">SVHC Flagged</option>
+          <option {% if flag_f=='ods' %}selected{% endif %} value="ods">ODS Flagged</option>
+          <option {% if flag_f=='rohs' %}selected{% endif %} value="rohs">RoHS Flagged</option>
+        </select>
+      </div>
+      <div class="col-12 col-md-2">
+        <div class="d-flex gap-1">
+          <button type="submit" class="btn btn-primary btn-sm w-100">Filter</button>
+          <a href="/materials" class="btn btn-outline-secondary btn-sm">✕</a>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-body p-0">
+    {% if materials %}
+    <div class="table-responsive">
+      <table class="table table-sm table-hover align-middle mb-0">
+        <thead>
+          <tr>
+            <th>Part Number</th>
+            <th>Description</th>
+            <th>Series</th>
+            <th>Supplier</th>
+            <th class="text-center">Risk</th>
+            <th class="text-center">Compliance Flags</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for m in materials %}
+          <tr>
+            <td class="fw-semibold text-xs">{{ m.part_number }}</td>
+            <td class="text-xs text-muted">{{ (m.description or '')[:55] }}{% if m.description and m.description|length > 55 %}…{% endif %}</td>
+            <td class="text-xs">{{ m.series_desc or m.material_series or '—' }}</td>
+            <td class="text-xs text-muted">{{ m.primary_supplier or '—' }}</td>
+            <td class="text-center text-xs">
+              {% if m.risk_level == 'High' %}
+                <span class="risk-dot risk-high"></span><span class="text-danger fw-semibold">High</span>
+              {% elif m.risk_level == 'Medium' %}
+                <span class="risk-dot risk-medium"></span><span style="color:#d97706" class="fw-semibold">Medium</span>
+              {% elif m.risk_level == 'Low' %}
+                <span class="risk-dot risk-low"></span><span class="text-success fw-semibold">Low</span>
+              {% else %}
+                <span class="risk-dot risk-unknown"></span><span class="text-muted">Unknown</span>
+              {% endif %}
+            </td>
+            <td class="text-center">
+              {% if m.pfas_flag %}<span class="badge flag-pfas rounded-pill me-1">PFAS</span>{% endif %}
+              {% if m.svhc_flag %}<span class="badge flag-svhc rounded-pill me-1">SVHC</span>{% endif %}
+              {% if m.ods_flag %}<span class="badge flag-ods rounded-pill me-1">ODS</span>{% endif %}
+              {% if m.rohs_flag %}<span class="badge flag-rohs rounded-pill me-1">RoHS</span>{% endif %}
+              {% if not m.pfas_flag and not m.svhc_flag and not m.ods_flag and not m.rohs_flag %}
+                <span class="text-muted text-xs">Clean</span>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    {% if total_pages > 1 %}
+    <nav class="px-3 py-2 border-top">
+      <ul class="pagination pagination-sm mb-0">
+        {% if page > 1 %}
+        <li class="page-item"><a class="page-link" href="?page={{ page-1 }}&search={{ search }}&risk={{ risk_f }}&flag={{ flag_f }}">‹</a></li>
+        {% endif %}
+        {% for pg in range([1, page-2]|max, [total_pages+1, page+3]|min) %}
+        <li class="page-item {% if pg==page %}active{% endif %}">
+          <a class="page-link" href="?page={{ pg }}&search={{ search }}&risk={{ risk_f }}&flag={{ flag_f }}">{{ pg }}</a>
+        </li>
+        {% endfor %}
+        {% if page < total_pages %}
+        <li class="page-item"><a class="page-link" href="?page={{ page+1 }}&search={{ search }}&risk={{ risk_f }}&flag={{ flag_f }}">›</a></li>
+        {% endif %}
+      </ul>
+    </nav>
+    {% endif %}
+
+    {% else %}
+    <div class="text-center py-5 text-muted">
+      <i class="bi bi-layers fs-1 d-block mb-2 opacity-25"></i>
+      No materials found. <a href="/import">Import BOM data to populate.</a>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

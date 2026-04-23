@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+{% block title %}Import Data{% endblock %}
+{% block content %}
+
+<div class="page-header">
+  <h1><i class="bi bi-upload me-2"></i>Import Data</h1>
+</div>
+
+<div class="row g-3 mb-4">
+  <!-- Step 1: Part List -->
+  <div class="col-12 col-md-4">
+    <div class="card h-100">
+      <div class="card-header"><span class="badge bg-secondary me-2">1</span>Part List</div>
+      <div class="card-body">
+        <p class="text-muted small">Upload your full part list export. This populates the master parts registry and identifies traded/intercompany parts.</p>
+        <p class="text-xs text-muted mb-3">Expected format: <code>Part_List.csv</code></p>
+        <form method="post" enctype="multipart/form-data">
+          <input type="hidden" name="import_type" value="part_list"/>
+          <div class="mb-2">
+            <input type="file" name="file" class="form-control form-control-sm" accept=".csv" required/>
+          </div>
+          <button type="submit" class="btn btn-primary btn-sm w-100">
+            <i class="bi bi-upload me-1"></i>Upload Part List
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Step 2: PO Listing -->
+  <div class="col-12 col-md-4">
+    <div class="card h-100">
+      <div class="card-header"><span class="badge bg-secondary me-2">2</span>PO Listing</div>
+      <div class="card-body">
+        <p class="text-muted small">Upload purchase order history. Links materials to suppliers and flags intercompany purchased parts.</p>
+        <p class="text-xs text-muted mb-3">Expected format: <code>UD-PO-LISTING.csv</code></p>
+        <form method="post" enctype="multipart/form-data">
+          <input type="hidden" name="import_type" value="po_listing"/>
+          <div class="mb-2">
+            <input type="file" name="file" class="form-control form-control-sm" accept=".csv" required/>
+          </div>
+          <button type="submit" class="btn btn-primary btn-sm w-100">
+            <i class="bi bi-upload me-1"></i>Upload PO Listing
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Step 3: BOM -->
+  <div class="col-12 col-md-4">
+    <div class="card h-100">
+      <div class="card-header"><span class="badge bg-secondary me-2">3</span>Bill of Materials</div>
+      <div class="card-body">
+        <p class="text-muted small">Upload the BOM material report. Links parent parts to their raw material components and auto-assesses compliance flags.</p>
+        <p class="text-xs text-muted mb-3">Expected format: <code>BOM_MATERIAL.csv</code></p>
+        <form method="post" enctype="multipart/form-data">
+          <input type="hidden" name="import_type" value="bom"/>
+          <div class="mb-2">
+            <input type="file" name="file" class="form-control form-control-sm" accept=".csv" required/>
+          </div>
+          <button type="submit" class="btn btn-primary btn-sm w-100">
+            <i class="bi bi-upload me-1"></i>Upload BOM
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="alert alert-info d-flex gap-2 align-items-start py-2 mb-4">
+  <i class="bi bi-info-circle-fill mt-1 flex-shrink-0"></i>
+  <div>
+    <strong>Monthly Refresh:</strong> Re-uploading any file will update existing records and add new ones — no duplicates will be created.
+    Changed BOMs and new parts are automatically detected and updated.
+  </div>
+</div>
+
+<!-- Import log -->
+<div class="card">
+  <div class="card-header"><i class="bi bi-clock-history me-1"></i>Import History</div>
+  <div class="card-body p-0">
+    {% if logs %}
+    <table class="table table-sm table-hover mb-0">
+      <thead>
+        <tr><th>Type</th><th>File</th><th>Added</th><th>Updated</th><th>Skipped</th><th>Date</th></tr>
+      </thead>
+      <tbody>
+        {% for log in logs %}
+        <tr>
+          <td><span class="badge bg-secondary">{{ log.import_type }}</span></td>
+          <td class="text-muted text-xs">{{ log.filename }}</td>
+          <td><span class="text-success fw-semibold">+{{ log.rows_added }}</span></td>
+          <td><span class="text-primary fw-semibold">↻{{ log.rows_updated }}</span></td>
+          <td class="text-muted">{{ log.rows_skipped }}</td>
+          <td class="text-muted text-xs">{{ log.imported_at[:16] }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="text-muted p-3 mb-0 text-center">No imports yet. Start with Step 1 above.</p>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
