@@ -12,7 +12,8 @@
 <div class="card">
   <div class="card-body p-0">
     {% if customers %}
-    <table class="table table-hover table-sm align-middle mb-0">
+    <div class="table-responsive">
+      <table class="table table-hover table-sm align-middle mb-0">
       <thead>
         <tr><th>Name</th><th>Contact</th><th>Email</th><th>Added</th><th>Actions</th></tr>
       </thead>
@@ -35,6 +36,7 @@
         {% endfor %}
       </tbody>
     </table>
+    </div>
     {% else %}
     <div class="text-center py-5 text-muted">
       <i class="bi bi-building fs-1 d-block mb-2 opacity-25"></i>

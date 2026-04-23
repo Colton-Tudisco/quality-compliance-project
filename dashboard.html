@@ -23,7 +23,7 @@
     </div>
   </div>
   <div class="col-6 col-md-3">
-    <div class="card stat-card h-100 p-3" style="border-color:#16a34a">
+    <div class="card stat-card stat-card-green h-100 p-3">
       <div class="stat-num text-success">
         {{ rohs_counts.get('Compliant', 0) }}
       </div>
@@ -31,7 +31,7 @@
     </div>
   </div>
   <div class="col-6 col-md-3">
-    <div class="card stat-card h-100 p-3" style="border-color:#d97706">
+    <div class="card stat-card stat-card-warning h-100 p-3">
       <div class="stat-num text-warning">
         {{ rohs_counts.get('Unknown', 0) }}
       </div>
@@ -39,7 +39,7 @@
     </div>
   </div>
   <div class="col-6 col-md-3">
-    <div class="card stat-card h-100 p-3" style="border-color:#7c3aed">
+    <div class="card stat-card stat-card-purple h-100 p-3">
       <div class="stat-num" style="color:#7c3aed">{{ total_docs }}</div>
       <div class="stat-lbl">Docs Generated</div>
     </div>
@@ -69,7 +69,7 @@
           <span class="fw-bold">{{ counts.get(label, 0) }}</span>
         </div>
         {% if not loop.last %}
-        <div style="height:1px;background:#f1f5f9;margin-bottom:8px;"></div>
+        <div class="separator"></div>
         {% endif %}
         {% endfor %}
       </div>
@@ -88,7 +88,8 @@
       </div>
       <div class="card-body p-0">
         {% if recent_docs %}
-        <table class="table table-sm table-hover mb-0">
+        <div class="table-responsive">
+          <table class="table table-sm table-hover mb-0">
           <thead><tr>
             <th>Part</th><th>Type</th><th>Customer</th><th>Date</th>
           </tr></thead>
@@ -103,6 +104,7 @@
             {% endfor %}
           </tbody>
         </table>
+        </div>
         {% else %}
         <p class="text-muted p-3 mb-0">No documents generated yet.</p>
         {% endif %}
@@ -118,7 +120,8 @@
       </div>
       <div class="card-body p-0">
         {% if recent_parts %}
-        <table class="table table-sm table-hover mb-0">
+        <div class="table-responsive">
+          <table class="table table-sm table-hover mb-0">
           <thead><tr>
             <th>Part #</th><th>Description</th><th>RoHS</th><th>Added</th>
           </tr></thead>
@@ -143,6 +146,7 @@
             {% endfor %}
           </tbody>
         </table>
+        </div>
         {% else %}
         <p class="text-muted p-3 mb-0">No parts added yet. <a href="/parts/add">Add one now.</a></p>
         {% endif %}

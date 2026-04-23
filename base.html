@@ -53,6 +53,22 @@
     .btn-primary:hover { background: var(--brand-dark); border-color: var(--brand-dark); }
     .section-title { font-size: .78rem; font-weight: 700; text-transform: uppercase;
                      letter-spacing: .6px; color: #94a3b8; margin: 1.2rem 0 .5rem; }
+    /* Utility classes for consistency */
+    .content-max-width { max-width: 900px; margin: 0 auto; }
+    .content-max-width-500 { max-width: 500px; margin: 0 auto; }
+    .form-text-small { font-size: .88rem; }
+    .form-text-xs { font-size: .82rem; }
+    .text-sm { font-size: .78rem; }
+    .text-xs { font-size: .72rem; }
+    .dl-small { font-size: .88rem; }
+    .badge-rohs { background: #16a34a; color: white; }
+    .badge-reach { background: #2563a8; color: white; }
+    .badge-pfas { background: #7c3aed; color: white; }
+    .badge-montreal { background: #d97706; color: white; }
+    .stat-card-green { border-left-color: #16a34a; }
+    .stat-card-warning { border-left-color: #d97706; }
+    .stat-card-purple { border-left-color: #7c3aed; }
+    .separator { height: 1px; background: #f1f5f9; margin-bottom: 8px; }
   </style>
 </head>
 <body>
@@ -74,35 +90,40 @@
     <p class="section-title px-3">Navigation</p>
     <ul class="nav flex-column">
       <li class="nav-item">
-        <a class="nav-link {% if request.endpoint == 'dashboard' %}active{% endif %}" href="/">
+        <a class="nav-link {% if request.endpoint == 'dashboard' %}active{% endif %}" href="dashboard.html">
           <i class="bi bi-speedometer2"></i> Dashboard
         </a>
       </li>
       <li class="nav-item">
-        <a class="nav-link {% if request.endpoint and 'part' in request.endpoint %}active{% endif %}" href="/parts">
+        <a class="nav-link {% if request.endpoint and 'part' in request.endpoint %}active{% endif %}" href="parts.html">
           <i class="bi bi-cpu"></i> Parts
         </a>
       </li>
       <li class="nav-item">
-        <a class="nav-link {% if request.endpoint and 'document' in request.endpoint %}active{% endif %}" href="/documents">
+        <a class="nav-link {% if request.endpoint and 'document' in request.endpoint %}active{% endif %}" href="documents.html">
           <i class="bi bi-file-earmark-pdf"></i> Documents
         </a>
       </li>
       <li class="nav-item">
-        <a class="nav-link {% if request.endpoint and 'customer' in request.endpoint %}active{% endif %}" href="/customers">
+        <a class="nav-link {% if request.endpoint and 'customer' in request.endpoint %}active{% endif %}" href="customers.html">
           <i class="bi bi-building"></i> Customers
+        </a>
+      </li>
+      <li class="nav-item">
+        <a class="nav-link {% if request.endpoint and 'part' in request.endpoint %}active{% endif %}" href="settings.html">
+          <i class="bi bi-gear"></i> Settings
         </a>
       </li>
     </ul>
     <p class="section-title px-3 mt-3">Quick Actions</p>
     <ul class="nav flex-column">
       <li class="nav-item">
-        <a class="nav-link" href="/parts/add">
+        <a class="nav-link" href="add_part.html">
           <i class="bi bi-plus-circle"></i> Add Part
         </a>
       </li>
       <li class="nav-item">
-        <a class="nav-link" href="/documents/generate">
+        <a class="nav-link" href="generate_document.html">
           <i class="bi bi-file-earmark-plus"></i> Generate Doc
         </a>
       </li>
