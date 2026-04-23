@@ -90,27 +90,27 @@
     <p class="section-title px-3">Navigation</p>
     <ul class="nav flex-column">
       <li class="nav-item">
-        <a class="nav-link {% if request.endpoint == 'dashboard' %}active{% endif %}" href="dashboard.html">
+        <a class="nav-link {% if request.endpoint == 'dashboard' %}active{% endif %}" href="/">
           <i class="bi bi-speedometer2"></i> Dashboard
         </a>
       </li>
       <li class="nav-item">
-        <a class="nav-link {% if request.endpoint and 'part' in request.endpoint %}active{% endif %}" href="parts.html">
+        <a class="nav-link {% if request.endpoint and 'part' in request.endpoint %}active{% endif %}" href="/parts">
           <i class="bi bi-cpu"></i> Parts
         </a>
       </li>
       <li class="nav-item">
-        <a class="nav-link {% if request.endpoint and 'document' in request.endpoint %}active{% endif %}" href="documents.html">
+        <a class="nav-link {% if request.endpoint and 'document' in request.endpoint %}active{% endif %}" href="/documents">
           <i class="bi bi-file-earmark-pdf"></i> Documents
         </a>
       </li>
       <li class="nav-item">
-        <a class="nav-link {% if request.endpoint and 'customer' in request.endpoint %}active{% endif %}" href="customers.html">
+        <a class="nav-link {% if request.endpoint and 'customer' in request.endpoint %}active{% endif %}" href="/customers">
           <i class="bi bi-building"></i> Customers
         </a>
       </li>
       <li class="nav-item">
-        <a class="nav-link {% if request.endpoint and 'part' in request.endpoint %}active{% endif %}" href="settings.html">
+        <a class="nav-link {% if request.endpoint and 'settings' in request.endpoint %}active{% endif %}" href="/settings">
           <i class="bi bi-gear"></i> Settings
         </a>
       </li>
@@ -118,12 +118,12 @@
     <p class="section-title px-3 mt-3">Quick Actions</p>
     <ul class="nav flex-column">
       <li class="nav-item">
-        <a class="nav-link" href="add_part.html">
+        <a class="nav-link" href="/parts/add">
           <i class="bi bi-plus-circle"></i> Add Part
         </a>
       </li>
       <li class="nav-item">
-        <a class="nav-link" href="generate_document.html">
+        <a class="nav-link" href="/documents/generate">
           <i class="bi bi-file-earmark-plus"></i> Generate Doc
         </a>
       </li>

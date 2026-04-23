@@ -421,6 +421,12 @@ def delete_customer(cust_id):
     flash("Customer deleted.", "info")
     return redirect(url_for("customers_list"))
 
+# ---------------------------------------------------------------------------
+# Settings
+# ---------------------------------------------------------------------------
+@app.route("/settings")
+def settings():
+    return render_template("settings.html")
 
 # ---------------------------------------------------------------------------
 # API: part info for JS (auto-fill generate form)
