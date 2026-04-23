@@ -31,11 +31,16 @@
           {% endfor %}
         </select>
       </div>
-      <div class="col-6 col-md-3">
+      <div class="col-auto">
         <div class="d-flex gap-1">
-          <button type="submit" class="btn btn-primary btn-sm w-100">Filter</button>
+          <button type="submit" class="btn btn-primary btn-sm px-5">Filter</button>
           <a href="/parts" class="btn btn-outline-secondary btn-sm">✕</a>
         </div>
+      </div>
+      <div class="col-auto ms-auto">
+        <a href="/parts/hidden" class="btn btn-outline-secondary btn-sm">
+          <i class="bi bi-eye-slash me-1"></i>Hidden
+        </a>
       </div>
     </form>
   </div>
@@ -90,8 +95,13 @@
             </td>
             <td>
               <a href="/parts/{{ p.part_number }}" class="btn btn-outline-secondary btn-sm" aria-label="View part details">
-                <i class="bi bi-eye"></i>
+                <i class="bi bi-info-circle"></i>
               </a>
+              <form method="post" action="/parts/{{ p.part_number }}/hide" class="d-inline">
+                <button type="submit" class="btn btn-outline-secondary btn-sm" aria-label="Hide part from listing">
+                  <i class="bi bi-eye-slash"></i>
+                </button>
+              </form> 
             </td>
           </tr>
           {% endfor %}
@@ -101,7 +111,7 @@
 
     <!-- Pagination -->
     {% if total_pages > 1 %}
-    <nav class="px-3 py-2 border-top">
+    <nav class="px-3 py-2 border-top" aria-label="Pagination">
       <ul class="pagination pagination-sm mb-0">
         {% if page > 1 %}
         <li class="page-item"><a class="page-link" href="?page={{ page-1 }}&search={{ search }}&cls={{ cls_f }}">‹</a></li>

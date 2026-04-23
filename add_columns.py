@@ -11,6 +11,7 @@ conn.execute("""
     )
 """)
 conn.execute("UPDATE parts SET is_active=0 WHERE UPPER(description) LIKE '%INACTIVE%'")
+conn.execute("ALTER TABLE parts ADD COLUMN is_hidden INTEGER DEFAULT 0")
 conn.commit()
 conn.close()
 print("Done")

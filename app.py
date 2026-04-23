@@ -367,7 +367,7 @@ def parts_list():
          WHERE cs.part_number=p.part_number AND cs.standard='Montreal Protocol' LIMIT 1) as montreal_status,
         (SELECT COUNT(*) FROM fmd_files f
          WHERE f.part_number=p.part_number) as has_fmd
-        FROM parts p WHERE p.is_traded=0 AND p.is_active=1"""
+        FROM parts p WHERE p.is_traded=0 AND p.is_active=1 AND p.is_hidden=0"""
     params = []
 
     if search:
@@ -400,11 +400,10 @@ def parts_list():
                            classes=classes, page=page,
                            total_pages=total_pages, total_count=total_count)
 
-
 @app.route("/parts/traded")
 def traded_parts():
     search = request.args.get("search","").strip()
-    query  = "SELECT * FROM parts WHERE is_traded=1"
+    query  = "SELECT * FROM parts WHERE is_traded=1 AND is_hidden=0"
     params = []
     if search:
         query += " AND (part_number LIKE ? OR description LIKE ?)"
@@ -414,6 +413,38 @@ def traded_parts():
     parts = conn.execute(query, params).fetchall()
     conn.close()
     return render_template("traded_parts.html", parts=parts, search=search)
+
+@app.route("/parts/hidden")
+def hidden_parts():
+    conn = get_db()
+    parts = conn.execute(
+        "SELECT * FROM parts WHERE is_hidden=1 ORDER BY part_number"
+    ).fetchall()
+    conn.close()
+    return render_template("hidden_parts.html", parts=parts)
+
+
+@app.route("/parts/<path:part_number>/hide", methods=["POST"])
+def hide_part(part_number):
+    conn = get_db()
+    conn.execute("UPDATE parts SET is_hidden=1 WHERE part_number=?", (part_number,))
+    conn.commit()
+    conn.close()
+    flash("Part hidden.", "info")
+    next_page = request.args.get("next")
+    if next_page == "traded":
+        return redirect(url_for("traded_parts"))
+    return redirect(url_for("parts_list"))
+
+
+@app.route("/parts/<path:part_number>/unhide", methods=["POST"])
+def unhide_part(part_number):
+    conn = get_db()
+    conn.execute("UPDATE parts SET is_hidden=0 WHERE part_number=?", (part_number,))
+    conn.commit()
+    conn.close()
+    flash("Part restored.", "success")
+    return redirect(url_for("hidden_parts"))
 
 
 @app.route("/parts/<path:part_number>")
@@ -504,9 +535,7 @@ def download_fmd(part_number):
     if not fmd or not os.path.exists(fmd["file_path"]):
         flash("FMD file not found.", "danger")
         return redirect(url_for("part_detail", part_number=part_number))
-    return send_file(fmd["file_path"], as_attachment=True,
-                     download_name=fmd["filename"])
-
+    return send_file(fmd["file_path"], as_attachment=True, download_name=fmd["filename"])
 
 # ---------------------------------------------------------------------------
 # Materials
@@ -875,7 +904,7 @@ def generate_document():
             (SELECT cs.status FROM compliance_status cs WHERE cs.part_number=p.part_number AND cs.standard='PFAS' LIMIT 1) as pfas_status,
             (SELECT cs.status FROM compliance_status cs WHERE cs.part_number=p.part_number AND cs.standard='Montreal Protocol' LIMIT 1) as montreal_status
         FROM parts p
-        WHERE p.is_traded=0 AND p.is_active=1
+        WHERE p.is_traded=0 AND p.is_active=1 AND p.is_hidden=0
         ORDER BY p.part_number
     """).fetchall()
     conn.close()

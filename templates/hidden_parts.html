@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block title %}Hidden Parts{% endblock %}
+{% block content %}
+
+<div class="page-header">
+    <div>
+        <h1><i class="bi bi-eye-slash me-2"></i>Hidden Parts</h1>
+        <p class="text-muted mb-0 small">Parts manually hidden from the main parts list and document generator.</p>
+    </div>
+</div>
+
+<div class="alert alert-info dflex gap-2 align-items-start py-2">
+    <i class="bi bi-info-circle mt-1"></i>
+    <div>
+        These parts have been hidden from the main parts list and document generator.
+        Use the Unhide button to restore a part to normal visibility.
+    </div>
+</div>
+<div class="card">
+  <div class="card-body p-0">
+    {% if parts %}
+    <div class="table-responsive">
+      <table class="table table-sm table-hover align-middle mb-0">
+        <thead>
+          <tr>
+            <th>Part Number</th>
+            <th>Description</th>
+            <th>Class</th>
+            <th class="text-center">Status</th>
+            <th class="text-end">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for p in parts %}
+          <tr>
+            <td class="fw-semibold text-xs">{{ p.part_number }}</td>
+            <td class="text-muted text-xs">{{ (p.description or '')[:55] }}</td>
+            <td class="text-xs text-muted">{{ p.part_class or '—' }}</td>
+            <td class="text-center">
+            {% if p.is_traded %}
+                <span class="badge badge-traded rounded-pill">Traded</span>
+            {% else %}
+                <span class="badge badge-unknown rounded-pill">Manufactured</span>
+            {% endif %}
+            </td>
+            <td class="text-end">
+              <form method="post" action="/parts/{{ p.part_number }}/unhide" class="d-inline">
+                <button type="submit" class="btn btn-outline-primary btn-sm">
+                  <i class="bi bi-eye me-1"></i>Unhide
+                </button>
+              </form>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="px-3 py-2 border-top text-muted text-xs">{{ parts|length }} hidden part(s)</div>
+    {% else %}
+    <div class="text-center py-5 text-muted">
+      <i class="bi bi-eye-slash fs-1 d-block mb-2 opacity-25"></i>
+      No hidden parts.
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
