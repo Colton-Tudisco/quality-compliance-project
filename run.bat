@@ -1,7 +1,7 @@
 @echo off
 echo ========================================
 echo   Comply — Compliance Management System
-echo   Schlegel Electronic Materials
+echo   {{ settings.get('company_name', '') }}
 echo ========================================
 echo.
 

@@ -1,6 +1,6 @@
 """
 Comply — Compliance Document Management System
-Schlegel Electronic Materials
+{{ settings.get('company_name', '') }}
 """
 
 import os
@@ -174,8 +174,58 @@ def init_db():
             hm_on_total_pct      REAL,
             parsed_at            TEXT DEFAULT (datetime('now')),
             FOREIGN KEY(part_number) REFERENCES fmd_files(part_number)
-        );                    
+        );
+                    
+        CREATE TABLE IF NOT EXISTS settings(
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            key         TEXT NOT NULL UNIQUE,
+            value       TEXT,
+            updated_at  TEXT DEFAULT (datetime('now'))
+        );
+                    
+        CREATE TABLE IF NOT EXISTS reference_data (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            category    TEXT NOT NULL,
+            value       TEXT NOT NULL,
+            sort_order  INTEGER DEFAULT 0,
+            created_at  TEXT DEFAULT (datetime('now')),
+            UNIQUE(category, value)
+        );
     """)
+    conn.commit()
+    # Seed default reference data if not already present
+    defaults = [
+        ("part_class",    "Finished Goods"),
+        ("part_class",    "Raw Material"),
+        ("part_class",    "Sub-Assembly"),
+        ("part_type",     "Manufactured"),
+        ("part_type",     "Purchased"),
+        ("traded_vendor", "Schlegel Electronic Materials Asia Limited (I/CO-S"),
+        ("traded_vendor", "Schlegel (Dongguan) Electronics Limited (I/CO-SEMA"),
+        ("product_group", "2301EMI FOF Gasket"),
+    ]
+    for category, value in defaults:
+        c.execute("""
+            INSERT OR IGNORE INTO reference_data (category, value)
+            VALUES (?, ?)
+        """, (category, value))
+
+    # Seed default settings if not already present
+    default_settings = [
+        ("company_name",      "Default Company Name"),
+        ("company_address",   ""),
+        ("company_phone",     ""),
+        ("company_email",     ""),
+        ("company_logo",      ""),
+        ("theme",             "navy"),
+        ("default_signatory", ""),
+    ]
+    for key, value in default_settings:
+        c.execute("""
+            INSERT OR IGNORE INTO settings (key, value)
+            VALUES (?, ?)
+        """, (key, value))
+
     conn.commit()
     conn.close()
 
@@ -292,12 +342,131 @@ def get_compliance_gaps(part_number, conn):
 @app.context_processor
 def inject_globals():
     import flask
-    return {"now": datetime.now(), "request": flask.request}
+    conn = get_db()
 
+    # Load all settings into a dict keyed by setting name
+    rows = conn.execute("SELECT key, value FROM settings").fetchall()
+    settings = {r["key"]: r["value"] for r in rows}
+
+    # Load theme — default to navy if not set
+    theme = settings.get("theme", "navy")
+
+    conn.close()
+    return {
+        "now":      datetime.now(),
+        "request":  flask.request,
+        "settings": settings,
+        "theme":    theme,
+    }
 
 # ---------------------------------------------------------------------------
 # Dashboard
 # ---------------------------------------------------------------------------
+
+@app.route("/settings", methods=["GET", "POST"])
+def settings_page():
+    conn = get_db()
+
+    if request.method == "POST":
+        action = request.form.get("action")
+
+        # --- Save company info ---
+        if action == "save_company":
+            fields = [
+                "company_name", "company_address", "company_phone",
+                "company_email", "default_signatory"
+            ]
+            for field in fields:
+                value = request.form.get(field, "").strip()
+                conn.execute("""
+                    INSERT INTO settings (key, value)
+                    VALUES (?, ?)
+                    ON CONFLICT(key) DO UPDATE SET value=excluded.value,
+                    updated_at=datetime('now')
+                """, (field, value))
+
+            # Handle logo upload separately
+            logo = request.files.get("company_logo")
+            if logo and logo.filename:
+                ext      = os.path.splitext(logo.filename)[1].lower()
+                if ext in (".png", ".jpg", ".jpeg", ".gif", ".webp"):
+                    logo_dir  = os.path.join(BASE_DIR, "static", "uploads")
+                    os.makedirs(logo_dir, exist_ok=True)
+                    logo_path = os.path.join(logo_dir, f"company_logo{ext}")
+                    logo.save(logo_path)
+                    conn.execute("""
+                        INSERT INTO settings (key, value) VALUES ('company_logo', ?)
+                        ON CONFLICT(key) DO UPDATE SET value=excluded.value,
+                        updated_at=datetime('now')
+                    """, (f"company_logo{ext}",))
+                else:
+                    flash("Logo must be PNG, JPG, GIF or WEBP.", "danger")
+
+            conn.commit()
+            flash("Company info saved.", "success")
+
+        # --- Save theme ---
+        elif action == "save_theme":
+            theme = request.form.get("theme", "navy")
+            conn.execute("""
+                INSERT INTO settings (key, value) VALUES ('theme', ?)
+                ON CONFLICT(key) DO UPDATE SET value=excluded.value,
+                updated_at=datetime('now')
+            """, (theme,))
+            conn.commit()
+            flash("Theme saved.", "success")
+
+        # --- Add reference data item ---
+        elif action == "add_ref":
+            category = request.form.get("category", "").strip()
+            value    = request.form.get("value", "").strip()
+            if category and value:
+                try:
+                    conn.execute("""
+                        INSERT INTO reference_data (category, value)
+                        VALUES (?, ?)
+                    """, (category, value))
+                    conn.commit()
+                    flash(f"Added '{value}' to {category}.", "success")
+                except Exception:
+                    flash(f"'{value}' already exists in {category}.", "warning")
+            else:
+                flash("Category and value are required.", "danger")
+
+        # --- Delete reference data item ---
+        elif action == "delete_ref":
+            ref_id = request.form.get("ref_id")
+            if ref_id:
+                conn.execute(
+                    "DELETE FROM reference_data WHERE id=?", (ref_id,)
+                )
+                conn.commit()
+                flash("Item deleted.", "info")
+
+        conn.close()
+        return redirect(url_for("settings_page"))
+
+    # GET — load everything
+    rows = conn.execute("SELECT key, value FROM settings").fetchall()
+    settings = {r["key"]: r["value"] for r in rows}
+
+    ref_data = conn.execute("""
+        SELECT * FROM reference_data ORDER BY category, sort_order, value
+    """).fetchall()
+
+    # Group reference data by category for the template
+    from itertools import groupby
+    ref_grouped = {}
+    for row in ref_data:
+        cat = row["category"]
+        if cat not in ref_grouped:
+            ref_grouped[cat] = []
+        ref_grouped[cat].append(dict(row))
+
+    conn.close()
+    return render_template("settings.html",
+                           settings=settings,
+                           ref_grouped=ref_grouped)
 
 @app.route("/")
 def dashboard():
@@ -1144,6 +1313,14 @@ def generate_document():
         filename  = f"{safe_type}_{customer or 'NoCustomer'}_{timestamp}.pdf"
         file_path = os.path.join(DOCS_DIR, filename)
 
+        # Build logo path from settings if a logo has been uploaded
+        logo_filename = conn.execute(
+            "SELECT value FROM settings WHERE key='company_logo'"
+        ).fetchone()
+        logo_path = None
+        if logo_filename and logo_filename["value"]:
+            logo_path = os.path.join(BASE_DIR, "static", "uploads", logo_filename["value"])
+
         generate_compliance_pdf(
             parts_data=parts_data,
             doc_type=doc_type,
@@ -1151,6 +1328,7 @@ def generate_document():
             signatory=signatory,
             company=company,
             output_path=file_path,
+            logo_path=logo_path,
         )
 
         doc_id = conn.execute("""

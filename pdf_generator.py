@@ -3,7 +3,7 @@ PDF Compliance Declaration Generator
 Generates multi-part supplier declarations for:
   RoHS / REACH / PFAS / Montreal Protocol / Combined
 """
-
+import os
 from reportlab.lib.pagesizes import letter
 from reportlab.lib import colors
 from reportlab.lib.styles import ParagraphStyle
@@ -73,10 +73,24 @@ def _status_color(status):
     return f'<font color="#d97706"><b>{status or "Unknown"}</b></font>'
 
 
-def _doc_header(doc_type_label, customer, company, date_str, styles, width, story):
+def _doc_header(doc_type_label, customer, company, date_str, styles, width, story, logo_path=None):
+    from reportlab.platypus import Image as RLImage
+
+    # Build the left cell — logo if available, otherwise company name text
+    if logo_path and os.path.exists(logo_path):
+        try:
+            logo = RLImage(logo_path, width=1.5*inch, height=0.5*inch)
+            logo.hAlign = "LEFT"
+            left_cell = logo
+        except Exception:
+            left_cell = Paragraph(f"<b>{company}</b>",
+                ParagraphStyle("co", fontName="Helvetica-Bold", fontSize=12, textColor=DARK_BLUE))
+    else:
+        left_cell = Paragraph(f"<b>{company}</b>",
+            ParagraphStyle("co", fontName="Helvetica-Bold", fontSize=12, textColor=DARK_BLUE))
+
     hdr_data = [[
-        Paragraph(f"<b>{company}</b>",
-            ParagraphStyle("co", fontName="Helvetica-Bold", fontSize=12, textColor=DARK_BLUE)),
+        left_cell,
         Paragraph(f"<b>{doc_type_label}</b>",
             ParagraphStyle("dn", fontName="Helvetica-Bold", fontSize=11,
                            textColor=MED_BLUE, alignment=TA_CENTER)),
@@ -346,7 +360,7 @@ def _montreal_section(parts_data, styles, width, story):
 
 
 def generate_compliance_pdf(parts_data, doc_type, customer, signatory,
-                             company, output_path):
+                             company, output_path, logo_path=None):
     """
     Generate a multi-part compliance declaration PDF.
 
@@ -380,7 +394,7 @@ def generate_compliance_pdf(parts_data, doc_type, customer, signatory,
     label = labels.get(doc_type, f"{doc_type} Declaration")
 
     # Header
-    _doc_header(label, customer, company, date_str, styles, width, story)
+    _doc_header(label, customer, company, date_str, styles, width, story, logo_path=logo_path)
 
     # Products covered
     _parts_summary_table(parts_data, doc_type, styles, width, story)

@@ -91,15 +91,35 @@
           <input type="text" name="customer" class="form-control form-control-sm"
                  placeholder="Who is this declaration for?"/>
         </div>
+
         <div class="mb-3">
           <label class="form-label fw-semibold small">Authorized Signatory</label>
-          <input type="text" name="signatory" class="form-control form-control-sm"
+          <select id="signatorySelect" class="form-select form-select-sm mb-2"
+                  onchange="toggleCustom('signatory')">
+            <option value="default">{{ settings.get('default_signatory') or 'No default set' }}</option>
+            <option value="custom">Custom…</option>
+          </select>
+          <input type="text" id="signatoryCustom"
+                 class="form-control form-control-sm d-none"
                  placeholder="Full name of signer"/>
+          <!-- Hidden field holds the final value submitted -->
+          <input type="hidden" name="signatory" id="signatoryValue"
+                 value="{{ settings.get('default_signatory', '') }}"/>
         </div>
+
         <div class="mb-3">
           <label class="form-label fw-semibold small">Company</label>
-          <input type="text" name="company" class="form-control form-control-sm"
-                 value="Schlegel Electronic Materials"/>
+          <select id="companySelect" class="form-select form-select-sm mb-2"
+                  onchange="toggleCustom('company')">
+            <option value="default">{{ settings.get('company_name') or 'No default set' }}</option>
+            <option value="custom">Custom…</option>
+          </select>
+          <input type="text" id="companyCustom"
+                 class="form-control form-control-sm d-none"
+                 placeholder="Company name"/>
+          <!-- Hidden field holds the final value submitted -->
+          <input type="hidden" name="company" id="companyValue"
+                 value="{{ settings.get('company_name', '') }}"/>
         </div>
 
         <div id="selectionSummary" class="alert alert-light py-2 small mb-3" style="display:none;">
@@ -193,6 +213,27 @@ if (preSelect) {
     if (cb.value === preSelect) cb.checked = true;
   });
   updateUI();
+}
+
+// Signatory and Company dropdown toggle
+function toggleCustom(field) {
+  const select = document.getElementById(field + 'Select');
+  const custom = document.getElementById(field + 'Custom');
+  const hidden = document.getElementById(field + 'Value');
+
+  if (select.value === 'custom') {
+    custom.classList.remove('d-none');
+    custom.focus();
+    hidden.value = '';
+    custom.addEventListener('input', function() {
+      hidden.value = this.value;
+    });
+  } else {
+    custom.classList.add('d-none');
+    custom.value = '';
+    if (field === 'signatory') hidden.value = '{{ settings.get("default_signatory", "") }}';
+    if (field === 'company')   hidden.value = '{{ settings.get("company_name", "") }}';
+  }
 }
 </script>
 {% endblock %}
