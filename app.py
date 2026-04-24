@@ -469,6 +469,50 @@ def unhide_part(part_number):
     flash("Part restored.", "success")
     return redirect(url_for("hidden_parts"))
 
+@app.route("/parts/<path:part_number>/delete", methods=["POST"])
+def delete_part(part_number):
+    conn = get_db()
+
+    # Check if part has linked data so we can warn in the flash message
+    fmd = conn.execute(
+        "SELECT id FROM fmd_files WHERE part_number=?", (part_number,)
+    ).fetchone()
+    docs = conn.execute(
+        "SELECT COUNT(*) FROM document_parts WHERE part_number=?", (part_number,)
+    ).fetchone()[0]
+
+    # Delete from all related tables first (order matters — children before parent)
+    conn.execute("DELETE FROM fmd_substances   WHERE part_number=?", (part_number,))
+    conn.execute("DELETE FROM fmd_files        WHERE part_number=?", (part_number,))
+    conn.execute("DELETE FROM compliance_status WHERE part_number=?", (part_number,))
+    conn.execute("DELETE FROM document_parts   WHERE part_number=?", (part_number,))
+    conn.execute("DELETE FROM bom_lines        WHERE parent_part=?", (part_number,))
+
+    # Delete the FMD file from disk if it exists
+    if fmd:
+        fmd_record = conn.execute(
+            "SELECT file_path FROM fmd_files WHERE part_number=?", (part_number,)
+        ).fetchone()
+        if fmd_record and os.path.exists(fmd_record["file_path"]):
+            os.remove(fmd_record["file_path"])
+
+    # Finally delete the part itself
+    is_traded = conn.execute(
+        "SELECT is_traded FROM parts WHERE part_number=?", (part_number,)
+    ).fetchone()
+    conn.execute("DELETE FROM parts WHERE part_number=?", (part_number,))
+
+    conn.commit()
+    conn.close()
+
+    # Redirect to the right list depending on part type
+    if is_traded and is_traded["is_traded"]:
+        flash(f"Part {part_number} and all associated data deleted.", "info")
+        return redirect(url_for("traded_parts"))
+    else:
+        flash(f"Part {part_number} and all associated data deleted.", "info")
+        return redirect(url_for("parts_list"))
+
 @app.route("/parts/<path:part_number>/edit", methods=["POST"])
 def edit_part(part_number):
     new_part_number   = request.form.get("part_number", "").strip().upper()

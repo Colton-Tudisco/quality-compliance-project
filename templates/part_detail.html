@@ -24,6 +24,10 @@
     {% endif %}
     <a href="{{ '/parts/traded' if part.is_traded else '/parts' }}" 
        class="btn btn-outline-secondary btn-sm">← Back</a>
+    <button type="button" class="btn btn-danger btn-sm"
+            data-bs-toggle="modal" data-bs-target="#deletePartModal">
+      <i class="bi bi-trash me-1"></i>Delete
+    </button>
   </div>
 </div>
 
@@ -445,6 +449,33 @@
     {% else %}
     <p class="text-muted p-3 mb-0">No documents yet. <a href="/documents/generate?part={{ part.part_number }}">Generate one.</a></p>
     {% endif %}
+  </div>
+</div>
+
+<!-- Delete Confirmation Modal -->
+<div class="modal fade" id="deletePartModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header" style="background:#dc2626;">
+        <h5 class="modal-title text-white">
+          <i class="bi bi-exclamation-triangle me-2"></i>Delete Part
+        </h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p>Are you sure you want to permanently delete <strong>{{ part.part_number }}</strong>?</p>
+        <p class="text-muted small mb-0">This will also delete all associated compliance status, FMD data, and substance records. This cannot be undone.</p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary btn-sm"
+                data-bs-dismiss="modal">Cancel</button>
+        <form method="post" action="/parts/{{ part.part_number }}/delete" class="d-inline">
+          <button type="submit" class="btn btn-danger btn-sm">
+            <i class="bi bi-trash me-1"></i>Yes, Delete Part
+          </button>
+        </form>
+      </div>
+    </div>
   </div>
 </div>
 
