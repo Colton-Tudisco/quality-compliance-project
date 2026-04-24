@@ -469,6 +469,71 @@ def unhide_part(part_number):
     flash("Part restored.", "success")
     return redirect(url_for("hidden_parts"))
 
+@app.route("/parts/<path:part_number>/edit", methods=["POST"])
+def edit_part(part_number):
+    new_part_number   = request.form.get("part_number", "").strip().upper()
+    description       = request.form.get("description", "").strip()
+    part_class        = request.form.get("part_class", "").strip()
+    part_type         = request.form.get("part_type", "").strip()
+    product_group     = request.form.get("product_group", "").strip()
+    uom               = request.form.get("uom", "").strip()
+    commodity_code    = request.form.get("commodity_code", "").strip()
+    traded_vendor     = request.form.get("traded_vendor", "").strip()
+
+    if not new_part_number:
+        flash("Part number cannot be empty.", "danger")
+        return redirect(url_for("part_detail", part_number=part_number))
+
+    conn = get_db()
+
+    # If part number changed, check for conflicts and update all references
+    if new_part_number != part_number:
+        existing = conn.execute(
+            "SELECT id FROM parts WHERE part_number = ?", (new_part_number,)
+        ).fetchone()
+        if existing:
+            conn.close()
+            flash(f"Part number {new_part_number} already exists.", "warning")
+            return redirect(url_for("part_detail", part_number=part_number))
+
+        # Update all tables that reference this part number
+        for table, column in [
+            ("compliance_status", "part_number"),
+            ("bom_lines",         "parent_part"),
+            ("fmd_files",         "part_number"),
+            ("fmd_substances",    "part_number"),
+            ("document_parts",    "part_number"),
+        ]:
+            conn.execute(
+                f"UPDATE {table} SET {column} = ? WHERE {column} = ?",
+                (new_part_number, part_number)
+            )
+
+    # Update the part itself
+    conn.execute("""
+        UPDATE parts SET
+            part_number    = ?,
+            description    = ?,
+            part_class     = ?,
+            part_type      = ?,
+            product_group  = ?,
+            uom            = ?,
+            commodity_code = ?,
+            traded_vendor  = ?,
+            updated_at     = datetime('now')
+        WHERE part_number = ?
+    """, (
+        new_part_number, description, part_class, part_type,
+        product_group, uom, commodity_code,
+        traded_vendor or None, part_number
+    ))
+
+    conn.commit()
+    conn.close()
+
+    flash("Part updated successfully.", "success")
+    return redirect(url_for("part_detail", part_number=new_part_number))
+
 @app.route("/parts/new", methods=["POST"])
 def new_part():
     part_number  = request.form.get("part_number", "").strip().upper()
