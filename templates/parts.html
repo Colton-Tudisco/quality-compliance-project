@@ -26,12 +26,28 @@
         <input type="text" name="search" class="form-control form-control-sm"
                placeholder="Search part number or description…" value="{{ search }}"/>
       </div>
-      <div class="col-6 col-md-3">
+      <div class="col-6 col-md-2">
         <select name="cls" class="form-select form-select-sm">
           <option value="">All Classes</option>
           {% for c in classes %}
           <option {% if cls_f==c.part_class %}selected{% endif %} value="{{ c.part_class }}">{{ c.part_class }}</option>
           {% endfor %}
+        </select>
+      </div>
+      <div class="col-6 col-md-2">
+        <select name="fmd" class="form-select form-select-sm">
+          <option value="">FMD: All</option>
+          <option value="yes" {% if fmd_f=='yes' %}selected{% endif %}>Has FMD</option>
+          <option value="no"  {% if fmd_f=='no'  %}selected{% endif %}>Missing FMD</option>
+        </select>
+      </div>
+      <div class="col-6 col-md-2">
+        <select name="rohs" class="form-select form-select-sm">
+          <option value="">RoHS: All</option>
+          <option value="Compliant"     {% if rohs_f=='Compliant'     %}selected{% endif %}>Compliant</option>
+          <option value="Non-Compliant" {% if rohs_f=='Non-Compliant' %}selected{% endif %}>Non-Compliant</option>
+          <option value="Needs Review"  {% if rohs_f=='Needs Review'  %}selected{% endif %}>Needs Review</option>
+          <option value="Unknown"       {% if rohs_f=='Unknown'       %}selected{% endif %}>Unknown</option>
         </select>
       </div>
       <div class="col-auto">
@@ -117,15 +133,15 @@
     <nav class="px-3 py-2 border-top" aria-label="Pagination">
       <ul class="pagination pagination-sm mb-0">
         {% if page > 1 %}
-        <li class="page-item"><a class="page-link" href="?page={{ page-1 }}&search={{ search }}&cls={{ cls_f }}">‹</a></li>
+        <li class="page-item"><a class="page-link" href="?page={{ page-1 }}&search={{ search }}&cls={{ cls_f }}&fmd={{ fmd_f }}&rohs={{ rohs_f }}">‹</a></li>
         {% endif %}
         {% for pg in range([1, page-2]|max, [total_pages+1, page+3]|min) %}
         <li class="page-item {% if pg==page %}active{% endif %}">
-          <a class="page-link" href="?page={{ pg }}&search={{ search }}&cls={{ cls_f }}">{{ pg }}</a>
+          <a class="page-link" href="?page={{ pg }}&search={{ search }}&cls={{ cls_f }}&fmd={{ fmd_f }}&rohs={{ rohs_f }}">{{ pg }}</a>
         </li>
         {% endfor %}
         {% if page < total_pages %}
-        <li class="page-item"><a class="page-link" href="?page={{ page+1 }}&search={{ search }}&cls={{ cls_f }}">›</a></li>
+        <li class="page-item"><a class="page-link" href="?page={{ page+1 }}&search={{ search }}&cls={{ cls_f }}&fmd={{ fmd_f }}&rohs={{ rohs_f }}">›</a></li>
         {% endif %}
       </ul>
     </nav>
@@ -135,7 +151,7 @@
     <div class="text-center py-5 text-muted">
       <i class="bi bi-boxes fs-1 d-block mb-2 opacity-25"></i>
       No parts found.
-      {% if search or cls_f %}<a href="/parts">Clear filters</a>{% else %}<a href="/import">Import parts to get started.</a>{% endif %}
+      {% if search or cls_f or fmd_f or rohs_f %}<a href="/parts">Clear filters</a>{% else %}<a href="/import">Import parts to get started.</a>{% endif %}
     </div>
     {% endif %}
   </div>
@@ -174,7 +190,13 @@
             <div class="row g-3">
               <div class="col-12 col-md-4">
                 <label class="form-label fw-semibold small">Part Class</label>
-                <input type="text" id="newPartClass" class="form-control form-control-sm" placeholder="e.g. Finished Goods"/>
+                <select id="newPartClass" class="form-select form-select-sm">
+                  <option value="">— Select —</option>
+                  <option value="Finished Goods">Finished Goods</option>
+                  <option value="Semi-Finished Goods">Semi-Finished Goods</option>
+                  <option value="Raw Materials">Raw Materials</option>
+                  <option value="Consumables">Consumables</option>
+                </select>
               </div>
               <div class="col-12 col-md-4">
                 <label class="form-label fw-semibold small">Part Type</label>

@@ -196,8 +196,9 @@ def init_db():
     # Seed default reference data if not already present
     defaults = [
         ("part_class",    "Finished Goods"),
-        ("part_class",    "Raw Material"),
-        ("part_class",    "Sub-Assembly"),
+        ("part_class",    "Semi-Finished Goods"),
+        ("part_class",    "Raw Materials"),
+        ("part_class",    "Consumables"),
         ("part_type",     "Manufactured"),
         ("part_type",     "Purchased"),
         ("traded_vendor", "Schlegel Electronic Materials Asia Limited (I/CO-S"),
@@ -537,8 +538,9 @@ def dashboard():
 @app.route("/parts")
 def parts_list():
     search   = request.args.get("search","").strip()
-    cls_f    = request.args.get("cls","")
-    status_f = request.args.get("status","")
+    cls_f    = request.args.get("cls", "")
+    fmd_f    = request.args.get("fmd", "")
+    rohs_f   = request.args.get("rohs", "")
     page     = int(request.args.get("page", 1))
     per_page = 50
 
@@ -562,6 +564,16 @@ def parts_list():
     if cls_f:
         query += " AND p.part_class = ?"
         params.append(cls_f)
+    if fmd_f == "yes":
+        query += " AND (SELECT COUNT(*) FROM fmd_files f WHERE f.part_number=p.part_number) > 0"
+    elif fmd_f == "no":
+        query += " AND (SELECT COUNT(*) FROM fmd_files f WHERE f.part_number=p.part_number) = 0"
+    if rohs_f:
+        if rohs_f == "Unknown":
+            query += " AND (SELECT cs.status FROM compliance_status cs WHERE cs.part_number=p.part_number AND cs.standard='RoHS' LIMIT 1) IS NULL"
+        else:
+            query += " AND (SELECT cs.status FROM compliance_status cs WHERE cs.part_number=p.part_number AND cs.standard='RoHS' LIMIT 1) = ?"
+            params.append(rohs_f)
 
     # Count query is kept separate and simple — no compliance subqueries needed,
     # just count rows matching the same base filters
@@ -573,6 +585,16 @@ def parts_list():
     if cls_f:
         count_q += " AND p.part_class = ?"
         count_params.append(cls_f)
+    if fmd_f == "yes":
+        count_q += " AND (SELECT COUNT(*) FROM fmd_files f WHERE f.part_number=p.part_number) > 0"
+    elif fmd_f == "no":
+        count_q += " AND (SELECT COUNT(*) FROM fmd_files f WHERE f.part_number=p.part_number) = 0"
+    if rohs_f:
+        if rohs_f == "Unknown":
+            count_q += " AND (SELECT cs.status FROM compliance_status cs WHERE cs.part_number=p.part_number AND cs.standard='RoHS' LIMIT 1) IS NULL"
+        else:
+            count_q += " AND (SELECT cs.status FROM compliance_status cs WHERE cs.part_number=p.part_number AND cs.standard='RoHS' LIMIT 1) = ?"
+            count_params.append(rohs_f)
 
     conn = get_db()
     total_count = conn.execute(count_q, count_params).fetchone()[0]
@@ -588,23 +610,39 @@ def parts_list():
 
     total_pages = (total_count + per_page - 1) // per_page
     return render_template("parts.html", parts=parts, search=search,
-                           cls_f=cls_f, status_f=status_f,
-                           classes=classes, page=page,
-                           total_pages=total_pages, total_count=total_count)
+                       cls_f=cls_f, fmd_f=fmd_f, rohs_f=rohs_f,
+                       classes=classes, page=page,
+                       total_pages=total_pages, total_count=total_count)
 
 @app.route("/parts/traded")
 def traded_parts():
-    search = request.args.get("search","").strip()
-    query  = "SELECT * FROM parts WHERE is_traded=1 AND is_hidden=0"
-    params = []
+    search   = request.args.get("search", "").strip()
+    cls_f    = request.args.get("cls", "")
+    vendor_f = request.args.get("vendor", "")
+    query    = "SELECT * FROM parts WHERE is_traded=1 AND is_hidden=0"
+    params   = []
     if search:
         query += " AND (part_number LIKE ? OR description LIKE ?)"
         params += [f"%{search}%", f"%{search}%"]
+    if cls_f:
+        query += " AND part_class = ?"
+        params.append(cls_f)
+    if vendor_f:
+        query += " AND traded_vendor = ?"
+        params.append(vendor_f)
     query += " ORDER BY part_number"
     conn = get_db()
-    parts = conn.execute(query, params).fetchall()
+    parts   = conn.execute(query, params).fetchall()
+    classes = conn.execute(
+        "SELECT DISTINCT part_class FROM parts WHERE is_traded=1 AND part_class != '' ORDER BY part_class"
+    ).fetchall()
+    vendors = conn.execute(
+        "SELECT DISTINCT traded_vendor FROM parts WHERE is_traded=1 AND traded_vendor != '' ORDER BY traded_vendor"
+    ).fetchall()
     conn.close()
-    return render_template("traded_parts.html", parts=parts, search=search)
+    return render_template("traded_parts.html", parts=parts, search=search,
+                           cls_f=cls_f, vendor_f=vendor_f,
+                           classes=classes, vendors=vendors)
 
 @app.route("/parts/hidden")
 def hidden_parts():
