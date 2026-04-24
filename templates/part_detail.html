@@ -22,7 +22,8 @@
       <i class="bi bi-file-earmark-plus me-1"></i>Generate Doc
     </a>
     {% endif %}
-    <a href="/parts" class="btn btn-outline-secondary btn-sm">← Back</a>
+    <a href="{{ '/parts/traded' if part.is_traded else '/parts' }}" 
+       class="btn btn-outline-secondary btn-sm">← Back</a>
   </div>
 </div>
 
@@ -185,6 +186,132 @@
     </form>
   </div>
 </div>
+
+{% if fmd_substances %}
+<div class="card mb-3">
+  <div class="card-header d-flex justify-content-between align-items-center">
+    <span><i class="bi bi-atom me-1"></i>Parsed Substance Data</span>
+    <span class="badge bg-secondary">{{ fmd_substances|length }} substance(s)</span>
+  </div>
+  <div class="card-body p-0">
+    <div class="table-responsive">
+
+      {% for material_name, substances in fmd_substances|groupby("material_name") %}
+      <table class="table table-sm mb-0">
+        <thead>
+          <tr style="background:#f8fafc; border-top: 2px solid #e2e8f0;">
+            <td colspan="6" class="fw-semibold text-xs py-2 px-3"
+                style="color:var(--brand-dark);">
+              <i class="bi bi-layers me-1"></i>{{ material_name }}
+              {% for sub in substances %}
+                {% if loop.first and sub.hm_on_total_pct %}
+                  <span class="text-muted fw-normal">
+                    — {{ sub.hm_on_total_pct }}% of total article weight
+                  </span>
+                {% endif %}
+              {% endfor %}
+            </td>
+          </tr>
+          <tr>
+            <th style="width:22%">Substance</th>
+            <th style="width:14%">CAS Number</th>
+            <th class="text-end" style="width:14%">% of HM</th>
+            <th class="text-end" style="width:14%">% of Article</th>
+            <th class="text-end" style="width:12%">Weight</th>
+            <th style="width:24%">Flags</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for sub in substances %}
+          <tr>
+            <td class="text-xs fw-semibold">{{ sub.substance_name }}</td>
+            <td class="text-xs text-muted font-monospace">
+              {% if sub.cas_number and sub.cas_number|lower not in
+                   ['company proprietary', 'unknown', 'n/a', ''] %}
+                {{ sub.cas_number }}
+              {% else %}
+                <span class="text-warning">{{ sub.cas_number or 'Not provided' }}</span>
+              {% endif %}
+            </td>
+            <td class="text-end text-xs">
+              {% if sub.weight_on_hm_pct %}
+                {{ "%.2f"|format(sub.weight_on_hm_pct) }}%
+              {% else %}—{% endif %}
+            </td>
+            <td class="text-end text-xs">
+              {% if sub.weight_on_total_pct %}
+                {{ "%.2f"|format(sub.weight_on_total_pct) }}%
+              {% else %}—{% endif %}
+            </td>
+            <td class="text-end text-xs text-muted">
+              {% if sub.substance_weight %}
+                {{ sub.substance_weight }} {{ sub.substance_weight_uom }}
+              {% else %}—{% endif %}
+            </td>
+            <td class="text-xs">
+              {% set svhc_list = [
+                "7440-02-0","7439-92-1","7440-43-9","1333-86-4",
+                "80-05-7","84-66-2","131-18-0","605-50-5",
+                "7789-06-2","1306-19-0","10108-64-2","7789-42-6",
+                "7790-79-6","10124-36-4","1306-23-6","18454-12-1",
+                "7758-97-6","7446-14-2","15245-44-0","12202-17-4"
+              ] %}
+              {% set rohs_list = [
+                "7439-92-1","7439-97-6","7440-43-9","18540-29-9",
+                "117-81-7","85-68-7","84-74-2","84-69-5"
+              ] %}
+              {% set pfas_terms = [
+                "fluoro","ptfe","teflon","fep","pvdf","pfas","pfoa","pfos","perfluoro"
+              ] %}
+
+              {% if sub.weight_on_total_pct and sub.weight_on_total_pct > 0.1
+                   and sub.cas_number in svhc_list %}
+                <span class="badge flag-svhc rounded-pill me-1">SVHC &gt;0.1%</span>
+              {% endif %}
+
+              {% if sub.cas_number in rohs_list %}
+                <span class="badge flag-rohs rounded-pill me-1">RoHS</span>
+              {% endif %}
+
+              {% set ns = namespace(is_pfas=false) %}
+              {% for term in pfas_terms %}
+                {% if term in sub.substance_name|lower %}
+                  {% set ns.is_pfas = true %}
+                {% endif %}
+              {% endfor %}
+              {% if ns.is_pfas %}
+                <span class="badge flag-pfas rounded-pill me-1">PFAS</span>
+              {% endif %}
+
+              {% if not sub.cas_number or
+                   sub.cas_number|lower in ['company proprietary','unknown','n/a',''] %}
+                <span class="badge badge-review rounded-pill">No CAS</span>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% endfor %}
+
+    </div>
+  </div>
+</div>
+
+{% elif fmd %}
+<div class="card mb-3">
+  <div class="card-header">
+    <i class="bi bi-atom me-1"></i>Parsed Substance Data
+  </div>
+  <div class="card-body">
+    <p class="text-muted small mb-0">
+      <i class="bi bi-exclamation-triangle me-1 text-warning"></i>
+      FMD file is on record but no substances were extracted.
+      The file may be in an unsupported format. Try re-uploading.
+    </p>
+  </div>
+</div>
+{% endif %}
 
 <div class="card">
   <div class="card-header d-flex justify-content-between">

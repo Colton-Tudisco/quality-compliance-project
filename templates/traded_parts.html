@@ -7,6 +7,9 @@
     <h1><i class="bi bi-arrow-left-right me-2"></i>Traded / Intercompany Parts</h1>
     <p class="text-muted mb-0 small">Parts sourced from Schlegel Asia or Dongguan — no BOM available, document generation not yet supported.</p>
   </div>
+  <button type="button" class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#newTradedPartModal">
+    <i class="bi bi-plus-circle me-1"></i>New Traded Part
+  </button>
 </div>
 
 <div class="alert alert-warning d-flex gap-2 align-items-start py-2">
@@ -52,7 +55,11 @@
         <tbody>
           {% for p in parts %}
           <tr>
-            <td class="fw-semibold text-xs">{{ p.part_number }}</td>
+            <td class="fw-semibold text-xs">
+              <a href="/parts/{{ p.part_number }}" class="text-decoration-none" style="color:var(--brand-dark)">
+                {{ p.part_number }}
+              </a>
+            </td>
             <td class="text-muted text-xs">{{ (p.description or '')[:55] }}</td>
             <td class="text-xs text-muted">{{ p.part_class or '—' }}</td>
             <td class="text-xs text-muted">{{ p.traded_vendor or '—' }}</td>
@@ -60,11 +67,16 @@
               <span class="badge badge-traded rounded-pill">No BOM</span>
             </td>
             <td class="text-end">
-              <form method="post" action="/parts/{{ p.part_number }}/hide?next=traded" class="d-inline">
-                <button type="submit" class="btn btn-outline-secondary btn-sm" aria-label="Hide part">
-                  <i class="bi bi-eye-slash"></i>
-                </button>
-              </form>
+              <div class="d-flex gap-1 justify-content-end">
+                <a href="/parts/{{ p.part_number }}" class="btn btn-outline-secondary btn-sm" aria-label="View part details">
+                  <i class="bi bi-info-circle"></i>
+                </a>
+                <form method="post" action="/parts/{{ p.part_number }}/hide?next=traded" class="d-inline">
+                  <button type="submit" class="btn btn-outline-secondary btn-sm" aria-label="Hide part">
+                    <i class="bi bi-eye-slash"></i>
+                  </button>
+                </form>
+              </div>
             </td>
           </tr>
           {% endfor %}
@@ -78,6 +90,115 @@
       No traded parts found. {% if search %}<a href="/parts/traded">Clear search</a>{% endif %}
     </div>
     {% endif %}
+  </div>
+</div>
+
+<!-- New Traded Part Modal -->
+<div class="modal fade" id="newTradedPartModal" tabindex="-1" aria-labelledby="newTradedPartModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+
+      <div class="modal-header" style="background:var(--brand-dark);">
+        <h5 class="modal-title text-white" id="newTradedPartModalLabel">
+          <i class="bi bi-plus-circle me-2"></i>Add New Traded Part
+        </h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+
+      <form method="post" action="/parts/new">
+        <input type="hidden" name="is_traded" value="1"/>
+
+        <div class="modal-body">
+
+          <!-- Required fields -->
+          <div class="row g-3 mb-3">
+            <div class="col-12 col-md-6">
+              <label class="form-label fw-semibold small">
+                Part Number <span class="text-danger">*</span>
+              </label>
+              <input type="text" name="part_number" class="form-control form-control-sm"
+                     placeholder="e.g. EJ8532Z0138HF" autofocus/>
+              <div class="form-text">Required if no description provided.</div>
+            </div>
+            <div class="col-12 col-md-6">
+              <label class="form-label fw-semibold small">
+                Description <span class="text-danger">*</span>
+              </label>
+              <input type="text" name="description" class="form-control form-control-sm"
+                     placeholder="e.g. EMI Gasket, Conductive Foam Strip"/>
+              <div class="form-text">Required if no part number provided.</div>
+            </div>
+          </div>
+
+          <div class="row g-3 mb-3">
+            <div class="col-12">
+              <label class="form-label fw-semibold small">Source Vendor</label>
+              <select name="traded_vendor" class="form-select form-select-sm">
+                <option value="">— Select —</option>
+                <option value="Schlegel Electronic Materials Asia Limited (I/CO-S">
+                  Schlegel Electronic Materials Asia Limited
+                </option>
+                <option value="Schlegel (Dongguan) Electronics Limited (I/CO-SEMA">
+                  Schlegel (Dongguan) Electronics Limited
+                </option>
+              </select>
+            </div>
+          </div>
+
+          <hr class="my-3"/>
+
+          <!-- Additional details -->
+          <div>
+            <a class="text-decoration-none small fw-semibold" data-bs-toggle="collapse"
+               href="#additionalDetailstraded" role="button" aria-expanded="false">
+              <i class="bi bi-chevron-down me-1"></i>Additional Details (optional)
+            </a>
+            <div class="collapse mt-3" id="additionalDetailstraded">
+              <div class="row g-3">
+                <div class="col-12 col-md-4">
+                  <label class="form-label fw-semibold small">Part Class</label>
+                  <input type="text" name="part_class" class="form-control form-control-sm"
+                         placeholder="e.g. Finished Goods"/>
+                </div>
+                <div class="col-12 col-md-4">
+                  <label class="form-label fw-semibold small">Part Type</label>
+                  <select name="part_type" class="form-select form-select-sm">
+                    <option value="">— Select —</option>
+                    <option value="M">Manufactured</option>
+                    <option value="P">Purchased</option>
+                  </select>
+                </div>
+                <div class="col-12 col-md-4">
+                  <label class="form-label fw-semibold small">Product Group</label>
+                  <input type="text" name="product_group" class="form-control form-control-sm"
+                         placeholder="e.g. 2301EMI FOF Gasket"/>
+                </div>
+                <div class="col-12 col-md-4">
+                  <label class="form-label fw-semibold small">Unit of Measure</label>
+                  <input type="text" name="uom" class="form-control form-control-sm"
+                         placeholder="e.g. PCS, FT, M"/>
+                </div>
+                <div class="col-12 col-md-4">
+                  <label class="form-label fw-semibold small">HS / Commodity Code</label>
+                  <input type="text" name="commodity_code" class="form-control form-control-sm"
+                         placeholder="e.g. 8544.42.9090"/>
+                </div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary btn-sm"
+                  data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-primary btn-sm">
+            <i class="bi bi-plus-circle me-1"></i>Create Part
+          </button>
+        </div>
+
+      </form>
+    </div>
   </div>
 </div>
 {% endblock %}

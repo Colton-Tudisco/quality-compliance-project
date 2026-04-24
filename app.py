@@ -11,6 +11,8 @@ from datetime import datetime
 from flask import (Flask, render_template, request, redirect, url_for,
                    flash, send_file, jsonify)
 from pdf_generator import generate_compliance_pdf
+from fmd_parser import parse_fmd_pdf
+from compliance_engine import determine_compliance
 
 BASE_DIR  = os.path.dirname(os.path.abspath(__file__))
 DB_PATH   = os.path.join(BASE_DIR, "comply.db")
@@ -158,6 +160,21 @@ def init_db():
             file_path    TEXT NOT NULL,
             uploaded_at  TEXT DEFAULT (datetime('now'))
         );
+
+        CREATE TABLE IF NOT EXISTS fmd_substances (
+            id                   INTEGER PRIMARY KEY AUTOINCREMENT,
+            part_number          TEXT NOT NULL,
+            material_name        TEXT,
+            substance_name       TEXT,
+            cas_number           TEXT,
+            substance_weight     REAL,
+            substance_weight_uom TEXT,
+            weight_on_hm_pct     REAL,
+            weight_on_total_pct  REAL,
+            hm_on_total_pct      REAL,
+            parsed_at            TEXT DEFAULT (datetime('now')),
+            FOREIGN KEY(part_number) REFERENCES fmd_files(part_number)
+        );                    
     """)
     conn.commit()
     conn.close()
@@ -377,13 +394,19 @@ def parts_list():
         query += " AND p.part_class = ?"
         params.append(cls_f)
 
-    count_query = query.replace(
-        "SELECT p.*,\n        (SELECT cs.status FROM compliance_status cs\n         WHERE cs.part_number=p.part_number AND cs.standard='RoHS' LIMIT 1) as rohs_status,\n        (SELECT cs.status FROM compliance_status cs\n         WHERE cs.part_number=p.part_number AND cs.standard='REACH' LIMIT 1) as reach_status,\n        (SELECT cs.status FROM compliance_status cs\n         WHERE cs.part_number=p.part_number AND cs.standard='PFAS' LIMIT 1) as pfas_status,\n        (SELECT cs.status FROM compliance_status cs\n         WHERE cs.part_number=p.part_number AND cs.standard='Montreal Protocol' LIMIT 1) as montreal_status\n        FROM parts p",
-        "SELECT COUNT(*) FROM parts p"
-    )
+    # Count query is kept separate and simple — no compliance subqueries needed,
+    # just count rows matching the same base filters
+    count_q = "SELECT COUNT(*) FROM parts p WHERE p.is_traded=0 AND p.is_active=1 AND p.is_hidden=0"
+    count_params = []
+    if search:
+        count_q += " AND (p.part_number LIKE ? OR p.description LIKE ?)"
+        count_params += [f"%{search}%", f"%{search}%"]
+    if cls_f:
+        count_q += " AND p.part_class = ?"
+        count_params.append(cls_f)
 
     conn = get_db()
-    total_count = conn.execute(count_query, params).fetchone()[0]
+    total_count = conn.execute(count_q, count_params).fetchone()[0]
 
     query += " ORDER BY p.part_number LIMIT ? OFFSET ?"
     params += [per_page, (page-1)*per_page]
@@ -446,6 +469,59 @@ def unhide_part(part_number):
     flash("Part restored.", "success")
     return redirect(url_for("hidden_parts"))
 
+@app.route("/parts/new", methods=["POST"])
+def new_part():
+    part_number  = request.form.get("part_number", "").strip().upper()
+    description  = request.form.get("description", "").strip()
+    is_traded    = int(request.form.get("is_traded", 0))
+    part_class   = request.form.get("part_class", "").strip()
+    part_type    = request.form.get("part_type", "").strip()
+    product_group= request.form.get("product_group", "").strip()
+    uom          = request.form.get("uom", "").strip()
+    commodity_code= request.form.get("commodity_code", "").strip()
+    traded_vendor = request.form.get("traded_vendor", "").strip()
+
+    # At least one of part_number or description is required
+    if not part_number and not description:
+        flash("Part number or description is required.", "danger")
+        return redirect(request.referrer or url_for("parts_list"))
+
+    # If no part number provided, auto-generate one from timestamp
+    # so the part always has a valid URL-safe identifier
+    if not part_number:
+        from datetime import datetime
+        part_number = "MANUAL-" + datetime.now().strftime("%Y%m%d%H%M%S")
+
+    conn = get_db()
+
+    # Check for duplicate
+    existing = conn.execute(
+        "SELECT id FROM parts WHERE part_number = ?", (part_number,)
+    ).fetchone()
+    if existing:
+        conn.close()
+        flash(f"Part {part_number} already exists.", "warning")
+        return redirect(request.referrer or url_for("parts_list"))
+
+    conn.execute("""
+        INSERT INTO parts (
+            part_number, description, part_class, part_type,
+            product_group, uom, commodity_code, is_traded,
+            traded_vendor, is_active, has_bom,
+            created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 0, datetime('now'), datetime('now'))
+    """, (
+        part_number, description, part_class, part_type,
+        product_group, uom, commodity_code, is_traded,
+        traded_vendor if is_traded else None
+    ))
+
+    conn.commit()
+    conn.close()
+
+    flash(f"Part {part_number} created successfully.", "success")
+    # Send them straight to the detail page to continue setup
+    return redirect(url_for("part_detail", part_number=part_number))
 
 @app.route("/parts/<path:part_number>")
 def part_detail(part_number):
@@ -491,9 +567,19 @@ def part_detail(part_number):
         "SELECT * FROM fmd_files WHERE part_number=?", (part_number,)
     ).fetchone()
 
+     # Parsed substances from FMD
+    fmd_substances = conn.execute("""
+        SELECT material_name, substance_name, cas_number,
+               substance_weight, substance_weight_uom,
+               weight_on_hm_pct, weight_on_total_pct, hm_on_total_pct
+        FROM fmd_substances
+        WHERE part_number = ?
+        ORDER BY material_name, weight_on_hm_pct DESC
+    """, (part_number,)).fetchall()
+
     conn.close()
     return render_template("part_detail.html", part=part, bom=bom,
-                           status_map=status_map, gaps=gaps, docs=docs, fmd=fmd)
+                           status_map=status_map, gaps=gaps, docs=docs, fmd=fmd, fmd_substances=fmd_substances)
 
 @app.route("/parts/<path:part_number>/fmd/upload", methods=["POST"])
 def upload_fmd(part_number):
@@ -501,8 +587,8 @@ def upload_fmd(part_number):
     if not f or not f.filename:
         flash("No file selected.", "danger")
         return redirect(url_for("part_detail", part_number=part_number))
-
-    # Keep original filename but prefix with part number to avoid collisions
+    
+    # --- Save the file ---
     safe_pn  = part_number.replace("/", "-")
     ext      = os.path.splitext(f.filename)[1]
     filename = f"{safe_pn}_FMD{ext}"
@@ -510,6 +596,10 @@ def upload_fmd(part_number):
     f.save(filepath)
 
     conn = get_db()
+
+    # --- Record file in fmd_files ---
+    # ON CONFLICT handles re-uploads — updates the record instead of
+    # creating a duplicate
     conn.execute("""
         INSERT INTO fmd_files (part_number, filename, file_path)
         VALUES (?, ?, ?)
@@ -518,10 +608,91 @@ def upload_fmd(part_number):
                       file_path=excluded.file_path,
                       uploaded_at=datetime('now')
     """, (part_number, filename, filepath))
+
+    # --- Parse the PDF ---
+    # parse_fmd_pdf returns a structured dict with manufacturer info
+    # and a list of materials, each containing a list of substances
+    try:
+        fmd_data = parse_fmd_pdf(filepath)
+    except Exception as e:
+        conn.commit()
+        conn.close()
+        flash(f"File saved but could not be parsed: {e}", "warning")
+        return redirect(url_for("part_detail", part_number=part_number))
+
+    # --- Clear old substance rows for this part ---
+    # If this is a re-upload we don't want stale data mixed with new data
+    conn.execute(
+        "DELETE FROM fmd_substances WHERE part_number = ?",
+        (part_number,)
+    )
+
+    # --- Insert new substance rows ---
+    # We flatten the nested structure: for each material, for each substance
+    # under that material, insert one row into fmd_substances.
+    # material_name is carried onto each substance row so the engine
+    # can reference it in flag messages.
+    all_substances = []
+
+    for mat in fmd_data.get("materials", []):
+        for sub in mat.get("substances", []):
+
+            conn.execute("""
+                INSERT INTO fmd_substances (
+                    part_number, material_name, substance_name, cas_number,
+                    substance_weight, substance_weight_uom,
+                    weight_on_hm_pct, weight_on_total_pct, hm_on_total_pct
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                part_number,
+                mat["material_name"],
+                sub["substance_name"],
+                sub["cas_number"],
+                sub["substance_weight"],
+                sub["substance_weight_uom"],
+                sub["weight_on_hm_pct"],
+                sub["weight_on_total_pct"],
+                mat["hm_on_total_pct"],
+            ))
+
+            # Build the flat list the compliance engine expects
+            all_substances.append({
+                "cas_number":          sub["cas_number"],
+                "substance_name":      sub["substance_name"],
+                "material_name":       mat["material_name"],
+                "weight_on_hm_pct":    sub["weight_on_hm_pct"],
+                "weight_on_total_pct": sub["weight_on_total_pct"],
+            })
+
+    # --- Run compliance determination ---
+    # determine_compliance returns a dict of {standard: {status, flags}}
+    # We write the status for each standard into compliance_status —
+    # the same table the dashboard, parts list, and document generator
+    # already read. Everything else updates automatically.
+    if all_substances:
+        compliance_results = determine_compliance(all_substances)
+
+        for standard, result in compliance_results.items():
+            notes = "; ".join(result["flags"]) if result["flags"] else None
+            conn.execute("""
+                INSERT INTO compliance_status
+                    (part_number, standard, status, notes, last_assessed)
+                VALUES (?, ?, ?, ?, datetime('now'))
+                ON CONFLICT(part_number, standard)
+                DO UPDATE SET status       = excluded.status,
+                              notes        = excluded.notes,
+                              last_assessed= excluded.last_assessed
+            """, (part_number, standard, result["status"], notes))
+
     conn.commit()
     conn.close()
 
-    flash("FMD uploaded successfully.", "success")
+    substance_count = len(all_substances)
+    flash(
+        f"FMD parsed successfully — {substance_count} substance(s) extracted "
+        f"and compliance status updated.",
+        "success"
+    )
     return redirect(url_for("part_detail", part_number=part_number))
 
 

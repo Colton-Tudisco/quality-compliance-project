@@ -13,6 +13,9 @@
 {% block content %}
 <div class="page-header">
   <h1><i class="bi bi-boxes me-2"></i>Parts <span class="text-muted fw-normal fs-6">({{ total_count }} total)</span></h1>
+  <button type="button" class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#newPartModal">
+    <i class="bi bi-plus-circle me-1"></i>New Part
+  </button>
 </div>
 
 <!-- Filters -->
@@ -137,4 +140,99 @@
     {% endif %}
   </div>
 </div>
+
+<!-- New Part Modal -->
+<div class="modal fade" id="newPartModal" tabindex="-1" aria-labelledby="newPartModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header" style="background:var(--brand-dark);">
+        <h5 class="modal-title text-white" id="newPartModalLabel">
+          <i class="bi bi-plus-circle me-2"></i>Add New Part
+        </h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="row g-3 mb-3">
+          <div class="col-12 col-md-6">
+            <label class="form-label fw-semibold small">Part Number <span class="text-danger">*</span></label>
+            <input type="text" id="newPartNumber" class="form-control form-control-sm" placeholder="e.g. EJ8532Z0138HF"/>
+            <div class="form-text">Required if no description provided.</div>
+          </div>
+          <div class="col-12 col-md-6">
+            <label class="form-label fw-semibold small">Description <span class="text-danger">*</span></label>
+            <input type="text" id="newPartDesc" class="form-control form-control-sm" placeholder="e.g. EMI Gasket, Conductive Foam Strip"/>
+            <div class="form-text">Required if no part number provided.</div>
+          </div>
+        </div>
+        <hr class="my-3"/>
+        <div>
+          <a class="text-decoration-none small fw-semibold" data-bs-toggle="collapse"
+             href="#additionalDetails" role="button" aria-expanded="false">
+            <i class="bi bi-chevron-down me-1"></i>Additional Details (optional)
+          </a>
+          <div class="collapse mt-3" id="additionalDetails">
+            <div class="row g-3">
+              <div class="col-12 col-md-4">
+                <label class="form-label fw-semibold small">Part Class</label>
+                <input type="text" id="newPartClass" class="form-control form-control-sm" placeholder="e.g. Finished Goods"/>
+              </div>
+              <div class="col-12 col-md-4">
+                <label class="form-label fw-semibold small">Part Type</label>
+                <select id="newPartType" class="form-select form-select-sm">
+                  <option value="">— Select —</option>
+                  <option value="M">Manufactured</option>
+                  <option value="P">Purchased</option>
+                </select>
+              </div>
+              <div class="col-12 col-md-4">
+                <label class="form-label fw-semibold small">Product Group</label>
+                <input type="text" id="newPartGroup" class="form-control form-control-sm" placeholder="e.g. 2301EMI FOF Gasket"/>
+              </div>
+              <div class="col-12 col-md-4">
+                <label class="form-label fw-semibold small">Unit of Measure</label>
+                <input type="text" id="newPartUOM" class="form-control form-control-sm" placeholder="e.g. PCS, FT, M"/>
+              </div>
+              <div class="col-12 col-md-4">
+                <label class="form-label fw-semibold small">HS / Commodity Code</label>
+                <input type="text" id="newPartHS" class="form-control form-control-sm" placeholder="e.g. 8544.42.9090"/>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-primary btn-sm" id="createPartBtn">
+          <i class="bi bi-plus-circle me-1"></i>Create Part
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.getElementById('createPartBtn').addEventListener('click', function() {
+  const data = new FormData();
+  data.append('part_number',    document.getElementById('newPartNumber').value);
+  data.append('description',    document.getElementById('newPartDesc').value);
+  data.append('is_traded',      '0');
+  data.append('part_class',     document.getElementById('newPartClass').value);
+  data.append('part_type',      document.getElementById('newPartType').value);
+  data.append('product_group',  document.getElementById('newPartGroup').value);
+  data.append('uom',            document.getElementById('newPartUOM').value);
+  data.append('commodity_code', document.getElementById('newPartHS').value);
+
+  fetch('/parts/new', {
+    method: 'POST',
+    body: data
+  }).then(response => {
+    window.location.href = response.url;
+  }).catch(err => {
+    alert('Something went wrong. Please try again.');
+  });
+});
+</script>
 {% endblock %}
