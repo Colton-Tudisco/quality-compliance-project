@@ -63,6 +63,78 @@
   {% endfor %}
 </div>
 
+<!-- FMD Coverage -->
+<div class="row g-3 mb-4">
+  <div class="col-12">
+    <div class="card">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-file-earmark-pdf me-1"></i>FMD Coverage</span>
+        <a href="/parts?fmd=no" class="text-white-50" style="font-size:.78rem;">
+          View parts missing FMD
+        </a>
+      </div>
+      <div class="card-body">
+        <div class="row g-3 align-items-center">
+
+          <!-- Coverage percentage + bar -->
+          <div class="col-12 col-md-6">
+            <div class="d-flex justify-content-between align-items-end mb-1">
+              <span class="fw-semibold small">Coverage</span>
+              <span class="fw-bold" style="font-size:1.4rem; color:var(--brand-dark);">
+                {{ fmd_coverage_pct }}%
+              </span>
+            </div>
+            <div class="progress" style="height:12px; border-radius:6px;">
+              <div class="progress-bar"
+                   role="progressbar"
+                   style="width:{{ fmd_coverage_pct }}%;
+                          background: {% if fmd_coverage_pct >= 75 %}#16a34a
+                                      {% elif fmd_coverage_pct >= 40 %}#d97706
+                                      {% else %}#dc2626{% endif %};"
+                   aria-valuenow="{{ fmd_coverage_pct }}"
+                   aria-valuemin="0" aria-valuemax="100"
+                   aria-label="FMD coverage {{ fmd_coverage_pct }}%">
+              </div>
+            </div>
+            <div class="text-muted text-xs mt-1">
+              {% if fmd_coverage_pct >= 75 %}
+                <i class="bi bi-check-circle text-success me-1"></i>Good coverage
+              {% elif fmd_coverage_pct >= 40 %}
+                <i class="bi bi-exclamation-circle text-warning me-1"></i>Coverage needs improvement
+              {% else %}
+                <i class="bi bi-x-circle text-danger me-1"></i>Low coverage — FMDs needed
+              {% endif %}
+            </div>
+          </div>
+
+          <!-- Stat breakdown -->
+          <div class="col-12 col-md-6">
+            <div class="row g-2 text-center">
+              <div class="col-6">
+                <div class="p-2 rounded" style="background:#f0fdf4; border:1px solid #bbf7d0;">
+                  <div class="fw-bold" style="font-size:1.5rem; color:#16a34a;">
+                    {{ parts_with_fmd }}
+                  </div>
+                  <div class="text-xs text-muted">Parts with FMD</div>
+                </div>
+              </div>
+              <div class="col-6">
+                <div class="p-2 rounded" style="background:#fef2f2; border:1px solid #fecaca;">
+                  <div class="fw-bold" style="font-size:1.5rem; color:#dc2626;">
+                    {{ parts_without_fmd }}
+                  </div>
+                  <div class="text-xs text-muted">Missing FMD</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div class="row g-3">
   <!-- Parts needing attention -->
   <div class="col-12 col-lg-6">

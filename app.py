@@ -651,6 +651,28 @@ def dashboard():
         GROUP BY d.id ORDER BY d.generated_at DESC LIMIT 8
     """).fetchall()
 
+    # FMD coverage stats
+    parts_with_fmd = conn.execute("""
+        SELECT COUNT(DISTINCT p.part_number)
+        FROM parts p
+        JOIN fmd_files f ON f.part_number = p.part_number
+        WHERE p.is_traded=0 AND p.is_active=1 AND p.is_hidden=0
+    """).fetchone()[0]
+
+    parts_without_fmd = conn.execute("""
+        SELECT COUNT(*)
+        FROM parts p
+        WHERE p.is_traded=0 AND p.is_active=1 AND p.is_hidden=0
+        AND NOT EXISTS (
+            SELECT 1 FROM fmd_files f WHERE f.part_number = p.part_number
+        )
+    """).fetchone()[0]
+
+    fmd_coverage_pct = round(
+        (parts_with_fmd / (parts_with_fmd + parts_without_fmd) * 100)
+        if (parts_with_fmd + parts_without_fmd) > 0 else 0
+    )
+
     last_import = conn.execute(
         "SELECT * FROM import_log ORDER BY imported_at DESC LIMIT 1"
     ).fetchone()
@@ -663,7 +685,9 @@ def dashboard():
         pfas_counts=pfas_counts, montreal_counts=montreal_counts,
         needs_attention=needs_attention, high_risk_mats=high_risk_mats,
         pfas_mats=pfas_mats, recent_docs=recent_docs,
-        last_import=last_import)
+        last_import=last_import, parts_with_fmd=parts_with_fmd,
+        parts_without_fmd=parts_without_fmd,
+        fmd_coverage_pct=fmd_coverage_pct,)
 
 
 # ---------------------------------------------------------------------------
