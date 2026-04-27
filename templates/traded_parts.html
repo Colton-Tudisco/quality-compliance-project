@@ -128,9 +128,6 @@
         <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
       </div>
 
-      <form method="post" action="/parts/new">
-        <input type="hidden" name="is_traded" value="1"/>
-
         <div class="modal-body">
 
           <!-- Required fields -->
@@ -220,13 +217,37 @@
         <div class="modal-footer">
           <button type="button" class="btn btn-outline-secondary btn-sm"
                   data-bs-dismiss="modal">Cancel</button>
-          <button type="submit" class="btn btn-primary btn-sm">
+          <button type="button" class="btn btn-primary btn-sm" id="createTradedPartBtn">
             <i class="bi bi-plus-circle me-1"></i>Create Part
           </button>
         </div>
-
-      </form>
     </div>
   </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.getElementById('createTradedPartBtn').addEventListener('click', function() {
+  const data = new FormData();
+  data.append('is_traded',      '1');
+  data.append('part_number',    document.querySelector('[name="part_number"]').value);
+  data.append('description',    document.querySelector('[name="description"]').value);
+  data.append('traded_vendor',  document.querySelector('[name="traded_vendor"]').value);
+  data.append('part_class',     document.querySelector('[name="part_class"]').value);
+  data.append('part_type',      document.querySelector('[name="part_type"]').value);
+  data.append('product_group',  document.querySelector('[name="product_group"]').value);
+  data.append('uom',            document.querySelector('[name="uom"]').value);
+  data.append('commodity_code', document.querySelector('[name="commodity_code"]').value);
+
+  fetch('/parts/new', {
+    method: 'POST',
+    body: data
+  }).then(response => {
+    window.location.href = response.url;
+  }).catch(err => {
+    alert('Something went wrong. Please try again.');
+  });
+});
+</script>
 {% endblock %}
