@@ -14,7 +14,14 @@
 <div class="page-header">
   <div>
     <h1><i class="bi bi-boxes me-2"></i>{{ part.part_number }}</h1>
-    <p class="text-muted mb-0">{{ part.description or 'No description' }}</p>
+    <p class="text-muted mb-0">
+      {{ part.description or 'No description' }}
+      {% if part.notes %}
+      <span class="badge badge-review rounded-pill ms-2" style="font-size:.7rem;">
+        <i class="bi bi-sticky me-1"></i>Has Notes
+      </span>
+      {% endif %}
+    </p>
   </div>
   <div class="d-flex gap-2">
     {% if not part.is_traded %}
@@ -144,6 +151,16 @@
             </dd>
           </div>
           {% endif %}
+
+          <div class="row mb-2">
+            <dt class="col-5 text-muted">Notes</dt>
+            <dd class="col-7 mb-0">
+              <span class="read-val">{{ part.notes or '—' }}</span>
+              <textarea name="notes" rows="3"
+                        class="edit-val form-control form-control-sm d-none"
+                        placeholder="Add compliance notes…">{{ part.notes or '' }}</textarea>
+            </dd>
+          </div>
 
           <div class="row mb-2">
             <dt class="col-5 text-muted">BOM</dt>

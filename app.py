@@ -98,7 +98,8 @@ def init_db():
             has_bom         INTEGER DEFAULT 0,
             created_at      TEXT DEFAULT (datetime('now')),
             updated_at      TEXT DEFAULT (datetime('now')),
-            is_hidden       INTEGER DEFAULT 0
+            is_hidden       INTEGER DEFAULT 0,
+            notes           TEXT
         );
 
         CREATE TABLE IF NOT EXISTS materials (
@@ -615,13 +616,31 @@ def dashboard():
 
     # Compliance summary
     def std_counts(standard):
+        # Count parts that have a compliance record for this standard
         rows = conn.execute("""
             SELECT cs.status, COUNT(*) cnt FROM compliance_status cs
             JOIN parts p ON p.part_number = cs.part_number
             WHERE cs.standard=? AND p.is_active=1 AND p.is_traded=0
+            AND p.is_hidden=0
             GROUP BY cs.status
         """, (standard,)).fetchall()
-        return {r["status"]: r["cnt"] for r in rows}
+        counts = {r["status"]: r["cnt"] for r in rows}
+
+        # Count parts with NO compliance record for this standard — these are the true Unknowns
+        unknown = conn.execute("""
+            SELECT COUNT(*) FROM parts p
+            WHERE p.is_active=1 AND p.is_traded=0 AND p.is_hidden=0
+            AND NOT EXISTS (
+                SELECT 1 FROM compliance_status cs
+                WHERE cs.part_number = p.part_number
+                AND cs.standard = ?
+            )
+        """, (standard,)).fetchone()[0]
+
+        if unknown > 0:
+            counts["Unknown"] = counts.get("Unknown", 0) + unknown
+
+        return counts
 
     rohs_counts     = std_counts("RoHS")
     reach_counts    = std_counts("REACH")
@@ -1085,6 +1104,7 @@ def edit_part(part_number):
     uom               = request.form.get("uom", "").strip()
     commodity_code    = request.form.get("commodity_code", "").strip()
     traded_vendor     = request.form.get("traded_vendor", "").strip()
+    notes             = request.form.get("notes", "").strip()
 
     if not new_part_number:
         flash("Part number cannot be empty.", "danger")
@@ -1126,12 +1146,13 @@ def edit_part(part_number):
             uom            = ?,
             commodity_code = ?,
             traded_vendor  = ?,
+            notes          = ?,
             updated_at     = datetime('now')
         WHERE part_number = ?
     """, (
         new_part_number, description, part_class, part_type,
         product_group, uom, commodity_code,
-        traded_vendor or None, part_number
+        traded_vendor or None, notes or None, part_number
     ))
 
     conn.commit()
