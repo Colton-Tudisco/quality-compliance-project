@@ -191,7 +191,23 @@ def init_db():
             created_at  TEXT DEFAULT (datetime('now')),
             UNIQUE(category, value)
         );
+
+        CREATE TABLE IF NOT EXISTS pending_parts (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            part_number     TEXT,
+            description     TEXT,
+            part_class      TEXT,
+            part_type       TEXT,
+            product_group   TEXT,
+            uom             TEXT,
+            commodity_code  TEXT,
+            fmd_file_path   TEXT,
+            fmd_filename    TEXT,
+            staged_at       TEXT DEFAULT (datetime('now')),
+            notes           TEXT
+        );
     """)
+
     conn.commit()
     # Seed default reference data if not already present
     defaults = [
@@ -334,6 +350,66 @@ def get_compliance_gaps(part_number, conn):
             "reason": "High-risk materials present — third-party test report recommended"
         })
     return gaps
+
+def match_filename_to_part(filename, conn):
+    """
+    Try to match an FMD filename to an existing part.
+    Returns a dict with:
+        - part_number: the matched part number (or None)
+        - description: the matched part description (or None)
+        - confidence: 'strong', 'fuzzy', or 'none'
+        - match_type: 'part_number', 'description', or None
+    """
+    # Strip the extension and clean up the filename
+    name = os.path.splitext(filename)[0]
+    name = name.replace('_', ' ').replace('-', ' ')
+
+    # Remove common FMD-related words that aren't part numbers
+    noise_words = ['FMD', 'fmd', 'declaration', 'Declaration', 'full', 'Full',
+                   'material', 'Material', 'compliance', 'Compliance', 'doc', 'Doc', 'IPC', 'ipc', '1752']
+    for word in noise_words:
+        name = name.replace(word, ' ')
+
+    # Collapse multiple spaces into one and strip
+    name = ' '.join(name.split()).strip()
+
+    if not name:
+        return {'part_number': None, 'description': None, 'confidence': 'none', 'match_type': None}
+
+    # 1. Try exact part number match first (strongest signal)
+    row = conn.execute(
+        "SELECT part_number, description FROM parts WHERE LOWER(part_number) = LOWER(?)",
+        (name,)
+    ).fetchone()
+    if row:
+        return {'part_number': row['part_number'], 'description': row['description'],
+                'confidence': 'strong', 'match_type': 'part_number'}
+
+   # 2. Try part number contained within the filename (still strong)
+    rows = conn.execute(
+        "SELECT part_number, description FROM parts WHERE LOWER(?) LIKE '%' || LOWER(part_number) || '%' AND LENGTH(part_number) > 4",
+        (name,)
+    ).fetchall()
+    if len(rows) == 1:
+        return {'part_number': rows[0]['part_number'], 'description': rows[0]['description'],
+                'confidence': 'strong', 'match_type': 'part_number'}
+    elif len(rows) > 1:
+        # Multiple parts found in filename — needs manual review
+        return {'part_number': None, 'description': None,
+                'confidence': 'none', 'match_type': 'multiple',
+                'candidates': [{'part_number': r['part_number'], 'description': r['description']} for r in rows]}
+    
+    # 3. Try description match (fuzzy — needs user confirmation)
+    row = conn.execute(
+        "SELECT part_number, description FROM parts WHERE LOWER(description) LIKE '%' || LOWER(?) || '%' AND LENGTH(?) > 5",
+        (name, name)
+    ).fetchone()
+    if row:
+        return {'part_number': row['part_number'], 'description': row['description'],
+                'confidence': 'fuzzy', 'match_type': 'description'}
+
+    # 4. No match found
+    return {'part_number': None, 'description': None, 'confidence': 'none', 'match_type': None}
 
 
 # ---------------------------------------------------------------------------
@@ -644,6 +720,132 @@ def traded_parts():
                            cls_f=cls_f, vendor_f=vendor_f,
                            classes=classes, vendors=vendors)
 
+@app.route("/parts/pending")
+def pending_parts():
+    conn = get_db()
+    parts = conn.execute(
+        "SELECT * FROM pending_parts ORDER BY staged_at DESC"
+    ).fetchall()
+    conn.close()
+    return render_template("pending_parts.html", parts=parts)
+
+
+@app.route("/parts/pending/<int:id>/approve", methods=["POST"])
+def approve_pending_part(id):
+    conn = get_db()
+    row = conn.execute(
+        "SELECT * FROM pending_parts WHERE id=?", (id,)
+    ).fetchone()
+
+    if not row:
+        flash("Pending part not found.", "danger")
+        conn.close()
+        return redirect(url_for("pending_parts"))
+
+    # Get the form values — user may have edited them on the review page
+    part_number    = request.form.get("part_number", "").strip()
+    description    = request.form.get("description", "").strip()
+    part_class     = request.form.get("part_class", "").strip()
+    part_type      = request.form.get("part_type", "").strip()
+    product_group  = request.form.get("product_group", "").strip()
+    uom            = request.form.get("uom", "").strip()
+    commodity_code = request.form.get("commodity_code", "").strip()
+
+    if not part_number and not description:
+        flash("Part number or description is required before approving.", "warning")
+        conn.close()
+        return redirect(url_for("pending_parts"))
+
+    # Insert into the main parts table
+    conn.execute("""
+        INSERT OR IGNORE INTO parts
+            (part_number, description, part_class, part_type,
+             product_group, uom, commodity_code, is_traded, is_active)
+        VALUES (?, ?, ?, ?, ?, ?, ?, 0, 1)
+    """, (part_number, description, part_class, part_type,
+          product_group, uom, commodity_code))
+
+    # Attach the FMD file to the new part
+    if row['fmd_file_path'] and os.path.exists(row['fmd_file_path']):
+        conn.execute("""
+            INSERT INTO fmd_files (part_number, filename, file_path)
+            VALUES (?, ?, ?)
+            ON CONFLICT(part_number)
+            DO UPDATE SET filename=excluded.filename,
+                          file_path=excluded.file_path,
+                          uploaded_at=datetime('now')
+        """, (part_number, row['fmd_filename'], row['fmd_file_path']))
+
+        # Parse the FMD and run compliance
+        try:
+            fmd_data = parse_fmd_pdf(row['fmd_file_path'])
+            conn.execute("DELETE FROM fmd_substances WHERE part_number = ?", (part_number,))
+            all_substances = []
+            for mat in fmd_data.get('materials', []):
+                for sub in mat.get('substances', []):
+                    conn.execute("""
+                        INSERT INTO fmd_substances (
+                            part_number, material_name, substance_name, cas_number,
+                            substance_weight, substance_weight_uom,
+                            weight_on_hm_pct, weight_on_total_pct, hm_on_total_pct
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """, (
+                        part_number, mat['material_name'], sub['substance_name'],
+                        sub['cas_number'], sub['substance_weight'], sub['substance_weight_uom'],
+                        sub['weight_on_hm_pct'], sub['weight_on_total_pct'], mat['hm_on_total_pct'],
+                    ))
+                    all_substances.append({
+                        'cas_number':          sub['cas_number'],
+                        'substance_name':      sub['substance_name'],
+                        'material_name':       mat['material_name'],
+                        'weight_on_hm_pct':    sub['weight_on_hm_pct'],
+                        'weight_on_total_pct': sub['weight_on_total_pct'],
+                    })
+            if all_substances:
+                compliance_results = determine_compliance(all_substances)
+                for standard, result in compliance_results.items():
+                    notes = '; '.join(result['flags']) if result['flags'] else None
+                    conn.execute("""
+                        INSERT INTO compliance_status (part_number, standard, status, notes, last_assessed)
+                        VALUES (?, ?, ?, ?, datetime('now'))
+                        ON CONFLICT(part_number, standard)
+                        DO UPDATE SET status=excluded.status,
+                                      notes=excluded.notes,
+                                      last_assessed=excluded.last_assessed
+                    """, (part_number, standard, result['status'], notes))
+            conn.execute("""
+                INSERT INTO import_log (import_type, filename, rows_added, notes)
+                VALUES ('fmd', ?, 1, ?)
+            """, (row['fmd_filename'], f"{len(all_substances)} substance(s) extracted for {part_number}."))
+        except Exception as e:
+            flash(f"Part approved but FMD could not be parsed: {e}", "warning")
+
+    # Remove from the pending queue
+    conn.execute("DELETE FROM pending_parts WHERE id=?", (id,))
+    conn.commit()
+    conn.close()
+
+    flash(f"Part {part_number} approved and added to parts list.", "success")
+    return redirect(url_for("pending_parts"))
+
+
+@app.route("/parts/pending/<int:id>/delete", methods=["POST"])
+def delete_pending_part(id):
+    conn = get_db()
+    row = conn.execute(
+        "SELECT * FROM pending_parts WHERE id=?", (id,)
+    ).fetchone()
+
+    if row and row['fmd_file_path'] and os.path.exists(row['fmd_file_path']):
+        os.remove(row['fmd_file_path'])
+
+    conn.execute("DELETE FROM pending_parts WHERE id=?", (id,))
+    conn.commit()
+    conn.close()
+
+    flash("Pending part discarded.", "info")
+    return redirect(url_for("pending_parts"))
+
 @app.route("/parts/hidden")
 def hidden_parts():
     conn = get_db()
@@ -896,6 +1098,154 @@ def part_detail(part_number):
     conn.close()
     return render_template("part_detail.html", part=part, bom=bom,
                            status_map=status_map, gaps=gaps, docs=docs, fmd=fmd, fmd_substances=fmd_substances)
+
+@app.route("/fmd/bulk-match", methods=["POST"])
+def fmd_bulk_match():
+    files = request.files.getlist("fmd_files")
+    if not files or all(f.filename == '' for f in files):
+        return jsonify({'error': 'No files selected.'}), 400
+
+    conn = get_db()
+    results = []
+
+    for f in files:
+        if not f.filename:
+            continue
+
+        # Save the file to a temp location in FMD_DIR
+        safe_name = f.filename.replace('/', '-').replace('\\', '-')
+        temp_path = os.path.join(FMD_DIR, 'tmp_' + safe_name)
+        f.save(temp_path)
+
+        # Run filename matching
+        match = match_filename_to_part(f.filename, conn)
+
+        results.append({
+            'filename':    f.filename,
+            'temp_path':   temp_path,
+            'part_number': match['part_number'],
+            'description': match['description'],
+            'confidence':  match['confidence'],
+            'match_type':  match['match_type'],
+            'candidates':  match.get('candidates', []),
+        })
+
+    conn.close()
+    return jsonify({'results': results})
+
+@app.route("/fmd/bulk-process", methods=["POST"])
+def fmd_bulk_process():
+    mappings = request.get_json()
+    if not mappings:
+        return jsonify({'error': 'No data received.'}), 400
+
+    conn = get_db()
+    processed = []
+
+    for item in mappings:
+        temp_path   = item.get('temp_path')
+        part_number = item.get('part_number', '').strip()
+        action      = item.get('action')  # 'process' or 'stage'
+
+        if not temp_path or not os.path.exists(temp_path):
+            processed.append({'filename': item.get('filename'), 'status': 'error', 'message': 'Temp file not found.'})
+            continue
+
+        # --- Rename temp file to a proper filename ---
+        safe_pn  = part_number.replace('/', '-') if part_number else 'unknown'
+        ext      = os.path.splitext(temp_path)[1]
+        filename = f"{safe_pn}_FMD{ext}"
+        filepath = os.path.join(FMD_DIR, filename)
+        if os.path.exists(filepath):
+            os.remove(filepath)
+        os.rename(temp_path, filepath)
+
+        # -----------------------------------------------
+        # OPTION A: Part exists — parse and run compliance
+        # -----------------------------------------------
+        if action == 'process':
+            try:
+                fmd_data = parse_fmd_pdf(filepath)
+            except Exception as e:
+                processed.append({'filename': item.get('filename'), 'status': 'error', 'message': str(e)})
+                continue
+
+            # Save FMD file record
+            conn.execute("""
+                INSERT INTO fmd_files (part_number, filename, file_path)
+                VALUES (?, ?, ?)
+                ON CONFLICT(part_number)
+                DO UPDATE SET filename=excluded.filename,
+                              file_path=excluded.file_path,
+                              uploaded_at=datetime('now')
+            """, (part_number, filename, filepath))
+
+            # Clear old substances and insert new ones
+            conn.execute("DELETE FROM fmd_substances WHERE part_number = ?", (part_number,))
+            all_substances = []
+            for mat in fmd_data.get('materials', []):
+                for sub in mat.get('substances', []):
+                    conn.execute("""
+                        INSERT INTO fmd_substances (
+                            part_number, material_name, substance_name, cas_number,
+                            substance_weight, substance_weight_uom,
+                            weight_on_hm_pct, weight_on_total_pct, hm_on_total_pct
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """, (
+                        part_number, mat['material_name'], sub['substance_name'],
+                        sub['cas_number'], sub['substance_weight'], sub['substance_weight_uom'],
+                        sub['weight_on_hm_pct'], sub['weight_on_total_pct'], mat['hm_on_total_pct'],
+                    ))
+                    all_substances.append({
+                        'cas_number':          sub['cas_number'],
+                        'substance_name':      sub['substance_name'],
+                        'material_name':       mat['material_name'],
+                        'weight_on_hm_pct':    sub['weight_on_hm_pct'],
+                        'weight_on_total_pct': sub['weight_on_total_pct'],
+                    })
+
+            # Run compliance
+            if all_substances:
+                compliance_results = determine_compliance(all_substances)
+                for standard, result in compliance_results.items():
+                    notes = '; '.join(result['flags']) if result['flags'] else None
+                    conn.execute("""
+                        INSERT INTO compliance_status (part_number, standard, status, notes, last_assessed)
+                        VALUES (?, ?, ?, ?, datetime('now'))
+                        ON CONFLICT(part_number, standard)
+                        DO UPDATE SET status=excluded.status,
+                                      notes=excluded.notes,
+                                      last_assessed=excluded.last_assessed
+                    """, (part_number, standard, result['status'], notes))
+            
+            conn.execute("""
+                INSERT INTO import_log (import_type, filename, rows_added, notes)
+                VALUES ('fmd', ?, 1, ?)
+            """, (item.get('filename'), f"{len(all_substances)} substance(s) extracted for {part_number}."))
+
+            processed.append({'filename': item.get('filename'), 'status': 'success',
+                               'message': f"{len(all_substances)} substance(s) extracted."})
+
+        # -----------------------------------------------
+        # OPTION B: No match — stage for manual review
+        # -----------------------------------------------
+        elif action == 'stage':
+            conn.execute("""
+                INSERT INTO pending_parts (part_number, description, fmd_file_path, fmd_filename, notes)
+                VALUES (?, ?, ?, ?, ?)
+            """, (
+                part_number or None,
+                item.get('description') or None,
+                filepath,
+                filename,
+                item.get('notes') or 'Added via bulk FMD upload — awaiting review.'
+            ))
+            processed.append({'filename': item.get('filename'), 'status': 'staged',
+                               'message': 'Added to pending review queue.'})
+
+    conn.commit()
+    conn.close()
+    return jsonify({'results': processed})
 
 @app.route("/parts/<path:part_number>/fmd/upload", methods=["POST"])
 def upload_fmd(part_number):

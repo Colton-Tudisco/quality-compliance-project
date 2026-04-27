@@ -68,6 +68,55 @@
   </div>
 </div>
 
+<!-- Bulk FMD Upload -->
+<div class="card mb-4">
+  <div class="card-header">
+    <i class="bi bi-file-earmark-pdf me-1"></i>Bulk FMD Upload
+  </div>
+  <div class="card-body">
+    <p class="text-muted small mb-3">Upload multiple Full Material Declaration PDFs at once. The system will attempt to match each file to an existing part — you'll review the matches before anything is processed.</p>
+
+    <!-- File picker -->
+    <div class="mb-3">
+      <input type="file" id="bulkFmdInput" class="form-control form-control-sm" accept=".pdf" multiple/>
+    </div>
+    <button type="button" class="btn btn-primary btn-sm" id="bulkMatchBtn">
+      <i class="bi bi-search me-1"></i>Match Files to Parts
+    </button>
+
+    <!-- Review table — hidden until files are matched -->
+    <div id="bulkReviewSection" class="mt-4" style="display:none;">
+      <h6 class="fw-semibold mb-2">Review Matches</h6>
+      <p class="text-muted small mb-2">Confirm or correct each match below. Files marked <span class="badge bg-warning text-dark">Fuzzy</span> or <span class="badge bg-danger">No Match</span> need your attention before processing.</p>
+      <div class="table-responsive">
+        <table class="table table-sm align-middle mb-3" id="bulkReviewTable">
+          <thead>
+            <tr>
+              <th>Filename</th>
+              <th>Matched Part</th>
+              <th>Confidence</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody id="bulkReviewBody">
+            <!-- Rows inserted by JavaScript -->
+          </tbody>
+        </table>
+      </div>
+      <button type="button" class="btn btn-success btn-sm" id="bulkProcessBtn">
+        <i class="bi bi-play-circle me-1"></i>Process All
+      </button>
+    </div>
+
+    <!-- Results summary — hidden until processing is done -->
+    <div id="bulkResultsSection" class="mt-4" style="display:none;">
+      <h6 class="fw-semibold mb-2">Results</h6>
+      <div id="bulkResultsList"></div>
+    </div>
+
+  </div>
+</div>
+
 <div class="alert alert-info d-flex gap-2 align-items-start py-2 mb-4">
   <i class="bi bi-info-circle-fill mt-1 flex-shrink-0"></i>
   <div>
@@ -88,7 +137,13 @@
       <tbody>
         {% for log in logs %}
         <tr>
-          <td><span class="badge bg-secondary">{{ log.import_type }}</span></td>
+          <td>
+            {% if log.import_type == 'fmd' %}
+              <span class="badge bg-danger">FMD</span>
+            {% else %}
+              <span class="badge bg-secondary">{{ log.import_type }}</span>
+            {% endif %}
+          </td>
           <td class="text-muted text-xs">{{ log.filename }}</td>
           <td><span class="text-success fw-semibold">+{{ log.rows_added }}</span></td>
           <td><span class="text-primary fw-semibold">↻{{ log.rows_updated }}</span></td>
@@ -104,3 +159,181 @@
   </div>
 </div>
 {% endblock %}
+
+{% block scripts %}
+<script>
+// ── Step 1: Match files to parts ──────────────────────────────────────────
+document.getElementById('bulkMatchBtn').addEventListener('click', function() {
+  const input = document.getElementById('bulkFmdInput');
+  if (!input.files.length) {
+    alert('Please select at least one PDF file.');
+    return;
+  }
+
+  const btn = this;
+  btn.disabled = true;
+  btn.innerHTML = '<i class="bi bi-hourglass-split me-1"></i>Matching…';
+
+  const formData = new FormData();
+  for (const file of input.files) {
+    formData.append('fmd_files', file);
+  }
+
+  fetch('/fmd/bulk-match', { method: 'POST', body: formData })
+    .then(r => r.json())
+    .then(data => {
+      if (data.error) { alert(data.error); return; }
+      buildReviewTable(data.results);
+      document.getElementById('bulkReviewSection').style.display = 'block';
+    })
+    .catch(() => alert('Something went wrong during matching.'))
+    .finally(() => {
+      btn.disabled = false;
+      btn.innerHTML = '<i class="bi bi-search me-1"></i>Match Files to Parts';
+    });
+});
+
+// ── Build the review table from match results ─────────────────────────────
+function buildReviewTable(results) {
+  const tbody = document.getElementById('bulkReviewBody');
+  tbody.innerHTML = '';
+
+  results.forEach((r, i) => {
+    const confidenceBadge = {
+      'strong': '<span class="badge bg-success">Strong</span>',
+      'fuzzy':  '<span class="badge bg-warning text-dark">Fuzzy</span>',
+      'none':   '<span class="badge bg-danger">No Match</span>',
+    }[r.confidence] || '<span class="badge bg-secondary">Unknown</span>';
+
+    let candidateSelect = '';
+    if (r.match_type === 'multiple' && r.candidates && r.candidates.length) {
+      candidateSelect = `<select class="form-select form-select-sm mt-1 part-number-select" data-idx="${i}">
+        <option value="">— Select correct part —</option>
+        ${r.candidates.map(c => `<option value="${c.part_number}">${c.part_number} — ${c.description || ''}</option>`).join('')}
+      </select>`;
+    }
+
+    const actionSelect = `
+      <select class="form-select form-select-sm action-select" data-idx="${i}">
+        <option value="process" ${r.part_number ? 'selected' : ''}>Process FMD</option>
+        <option value="stage"   ${!r.part_number ? 'selected' : ''}>Stage for Review</option>
+        <option value="skip">Skip</option>
+      </select>`;
+
+    const row = `<tr data-idx="${i}"
+                     data-temp-path="${r.temp_path}"
+                     data-filename="${r.filename}"
+                     data-description="${r.description || ''}">
+      <td class="text-xs text-muted">${r.filename}</td>
+      <td>
+        <input type="text" class="form-control form-control-sm part-number-input"
+               data-idx="${i}" value="${r.part_number || ''}"
+               placeholder="Enter part number"/>
+        ${candidateSelect}
+      </td>
+      <td>${confidenceBadge}</td>
+      <td style="min-width:140px">${actionSelect}</td>
+    </tr>`;
+
+    tbody.insertAdjacentHTML('beforeend', row);
+  });
+
+  tbody.querySelectorAll('.part-number-select').forEach(sel => {
+    sel.addEventListener('change', function() {
+      const idx = this.dataset.idx;
+      document.querySelector(`.part-number-input[data-idx="${idx}"]`).value = this.value;
+    });
+  });
+}
+
+// ── Step 2: Process confirmed mappings ────────────────────────────────────
+document.getElementById('bulkProcessBtn').addEventListener('click', function() {
+  const rows = document.querySelectorAll('#bulkReviewBody tr');
+  const mappings = [];
+
+  rows.forEach(row => {
+    const action = row.querySelector('.action-select').value;
+    if (action === 'skip') return;
+
+    mappings.push({
+      filename:    row.dataset.filename,
+      temp_path:   row.dataset.tempPath,
+      part_number: row.querySelector('.part-number-input').value.trim(),
+      description: row.dataset.description,
+      action:      action,
+      notes:       'Added via bulk FMD upload — awaiting review.',
+    });
+  });
+
+  if (!mappings.length) {
+    alert('Nothing to process — all files are set to Skip.');
+    return;
+  }
+
+  const btn = this;
+  btn.disabled = true;
+  btn.innerHTML = '<i class="bi bi-hourglass-split me-1"></i>Processing…';
+
+  fetch('/fmd/bulk-process', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(mappings)
+  })
+    .then(r => r.json())
+    .then(data => {
+      if (data.error) { alert(data.error); return; }
+      buildResultsSummary(data.results);
+      document.getElementById('bulkResultsSection').style.display = 'block';
+      document.getElementById('bulkReviewSection').style.display  = 'none';
+    })
+    .catch(() => alert('Something went wrong during processing.'))
+    .finally(() => {
+      btn.disabled = false;
+      btn.innerHTML = '<i class="bi bi-play-circle me-1"></i>Process All';
+    });
+});
+
+// ── Build results summary ─────────────────────────────────────────────────
+function buildResultsSummary(results) {
+  const container = document.getElementById('bulkResultsList');
+  let html = '<ul class="list-group list-group-flush">';
+
+  results.forEach(r => {
+    const icon = {
+      'success': '<i class="bi bi-check-circle-fill text-success me-2"></i>',
+      'staged':  '<i class="bi bi-hourglass-split text-warning me-2"></i>',
+      'error':   '<i class="bi bi-x-circle-fill text-danger me-2"></i>',
+    }[r.status] || '';
+
+    html += `<li class="list-group-item py-1 text-sm">
+      ${icon}<span class="text-muted small">${r.filename}</span>
+      <span class="ms-2 small">${r.message}</span>
+    </li>`;
+  });
+
+  html += '</ul>';
+
+  const success = results.filter(r => r.status === 'success').length;
+  const staged  = results.filter(r => r.status === 'staged').length;
+  const errors  = results.filter(r => r.status === 'error').length;
+
+  html = `<div class="d-flex gap-3 mb-2 small">
+    <span class="text-success fw-semibold"><i class="bi bi-check-circle me-1"></i>${success} processed</span>
+    <span class="text-warning fw-semibold"><i class="bi bi-hourglass-split me-1"></i>${staged} staged</span>
+    <span class="text-danger fw-semibold"><i class="bi bi-x-circle me-1"></i>${errors} errors</span>
+  </div>` + html;
+
+  container.innerHTML = html;
+
+  if (staged > 0) {
+    container.insertAdjacentHTML('beforeend',
+      `<a href="/parts/pending" class="btn btn-outline-warning btn-sm mt-2">
+        <i class="bi bi-hourglass-split me-1"></i>Review ${staged} Pending Part(s)
+      </a>`
+    );
+  }
+}
+</script>
+{% endblock %}
+
+

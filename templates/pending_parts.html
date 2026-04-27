@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+{% block title %}Pending Parts{% endblock %}
+{% block content %}
+
+<div class="page-header">
+  <div>
+    <h1><i class="bi bi-hourglass-split me-2"></i>Pending Parts
+      <span class="text-muted fw-normal fs-6">({{ parts|length }} awaiting review)</span>
+    </h1>
+    <p class="text-muted mb-0 small">These parts were added via bulk FMD upload and need to be reviewed before entering the main parts list.</p>
+  </div>
+</div>
+
+{% if parts %}
+  {% for p in parts %}
+  <div class="card mb-3">
+    <div class="card-header d-flex justify-content-between align-items-center py-2">
+      <span class="fw-semibold small">
+        <i class="bi bi-file-earmark-pdf me-1 text-danger"></i>{{ p.fmd_filename or 'Unknown file' }}
+      </span>
+      <span class="text-muted small">Staged {{ p.staged_at }}</span>
+    </div>
+    <div class="card-body">
+      <form method="post" action="/parts/pending/{{ p.id }}/approve">
+        <div class="row g-3 mb-3">
+          <div class="col-12 col-md-4">
+            <label class="form-label fw-semibold small">Part Number <span class="text-danger">*</span></label>
+            <input type="text" name="part_number" class="form-control form-control-sm"
+                   value="{{ p.part_number or '' }}" placeholder="Enter part number"/>
+          </div>
+          <div class="col-12 col-md-4">
+            <label class="form-label fw-semibold small">Description</label>
+            <input type="text" name="description" class="form-control form-control-sm"
+                   value="{{ p.description or '' }}" placeholder="Enter description"/>
+          </div>
+          <div class="col-12 col-md-4">
+            <label class="form-label fw-semibold small">Part Class</label>
+            <select name="part_class" class="form-select form-select-sm">
+              <option value="">— Select —</option>
+              <option value="Finished Goods"      {% if p.part_class=='Finished Goods'      %}selected{% endif %}>Finished Goods</option>
+              <option value="Semi-Finished Goods" {% if p.part_class=='Semi-Finished Goods' %}selected{% endif %}>Semi-Finished Goods</option>
+              <option value="Raw Materials"       {% if p.part_class=='Raw Materials'       %}selected{% endif %}>Raw Materials</option>
+              <option value="Consumables"         {% if p.part_class=='Consumables'         %}selected{% endif %}>Consumables</option>
+            </select>
+          </div>
+          <div class="col-12 col-md-4">
+            <label class="form-label fw-semibold small">Part Type</label>
+            <select name="part_type" class="form-select form-select-sm">
+              <option value="">— Select —</option>
+              <option value="M" {% if p.part_type=='M' %}selected{% endif %}>Manufactured</option>
+              <option value="P" {% if p.part_type=='P' %}selected{% endif %}>Purchased</option>
+            </select>
+          </div>
+          <div class="col-12 col-md-4">
+            <label class="form-label fw-semibold small">Product Group</label>
+            <input type="text" name="product_group" class="form-control form-control-sm"
+                   value="{{ p.product_group or '' }}" placeholder="e.g. 2301EMI FOF Gasket"/>
+          </div>
+          <div class="col-12 col-md-4">
+            <label class="form-label fw-semibold small">Unit of Measure</label>
+            <input type="text" name="uom" class="form-control form-control-sm"
+                   value="{{ p.uom or '' }}" placeholder="e.g. PCS, FT, M"/>
+          </div>
+        </div>
+
+        {% if p.notes %}
+        <div class="alert alert-info py-1 px-2 small mb-3">
+          <i class="bi bi-info-circle me-1"></i>{{ p.notes }}
+        </div>
+        {% endif %}
+
+        <div class="d-flex gap-2">
+          <button type="submit" class="btn btn-success btn-sm">
+            <i class="bi bi-check-circle me-1"></i>Approve & Add to Parts
+          </button>
+        </div>
+      </form>
+
+      <form method="post" action="/parts/pending/{{ p.id }}/delete" class="d-inline mt-2">
+        <button type="submit" class="btn btn-outline-danger btn-sm mt-2"
+                onclick="return confirm('Discard this pending part and delete the FMD file?')">
+          <i class="bi bi-trash me-1"></i>Discard
+        </button>
+      </form>
+
+    </div>
+  </div>
+  {% endfor %}
+
+{% else %}
+<div class="card">
+  <div class="text-center py-5 text-muted">
+    <i class="bi bi-hourglass fs-1 d-block mb-2 opacity-25"></i>
+    No parts pending review.
+  </div>
+</div>
+{% endif %}
+
+{% endblock %}
