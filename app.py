@@ -1581,6 +1581,230 @@ def download_fmd(part_number):
 # Materials
 # ---------------------------------------------------------------------------
 
+@app.route("/parts/<path:part_number>/bom/add", methods=["POST"])
+def add_bom_line(part_number):
+    material_part = request.form.get("material_part", "").strip().upper()
+    description   = request.form.get("description", "").strip()
+    qty           = request.form.get("qty_per_parent", "1").strip()
+    uom           = request.form.get("uom", "").strip()
+
+    if not material_part:
+        flash("Material part number is required.", "danger")
+        return redirect(url_for("part_detail", part_number=part_number))
+
+    try:
+        qty = float(qty)
+    except ValueError:
+        qty = 1.0
+
+    conn = get_db()
+
+    # Create the material if it doesn't exist yet
+    existing_mat = conn.execute(
+        "SELECT id FROM materials WHERE part_number=?", (material_part,)
+    ).fetchone()
+    primary_supplier = request.form.get("primary_supplier", "").strip()
+    material_series  = request.form.get("material_series", "").strip()
+
+    if not existing_mat:
+        flags = assess_material_flags(description, material_series)
+        conn.execute("""
+            INSERT INTO materials (part_number, description, material_series,
+                primary_supplier, risk_level,
+                pfas_flag, svhc_flag, ods_flag, rohs_flag)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (material_part, description, material_series or None,
+              primary_supplier or None, flags["risk_level"],
+              flags["pfas_flag"], flags["svhc_flag"],
+              flags["ods_flag"], flags["rohs_flag"]))
+
+    # Check for duplicate BOM line
+    existing_bom = conn.execute("""
+        SELECT id FROM bom_lines
+        WHERE parent_part=? AND material_part=? AND level=0
+    """, (part_number, material_part)).fetchone()
+
+    if existing_bom:
+        flash(f"{material_part} is already in this BOM.", "warning")
+        conn.close()
+        return redirect(url_for("part_detail", part_number=part_number))
+
+    # Add the BOM line
+    conn.execute("""
+        INSERT INTO bom_lines (parent_part, material_part, level, qty_per_parent, uom)
+        VALUES (?, ?, 0, ?, ?)
+    """, (part_number, material_part, qty, uom))
+
+    # Mark the parent part as having a BOM
+    conn.execute(
+        "UPDATE parts SET has_bom=1 WHERE part_number=?", (part_number,)
+    )
+
+    # Re-run compliance assessment for the parent
+    _auto_assess_part(part_number, conn)
+
+    conn.commit()
+    conn.close()
+
+    flash(f"{material_part} added to BOM.", "success")
+    return redirect(url_for("part_detail", part_number=part_number))
+
+
+@app.route("/parts/<path:part_number>/bom/remove", methods=["POST"])
+def remove_bom_line(part_number):
+    material_part = request.form.get("material_part", "").strip()
+
+    if not material_part:
+        flash("No material specified.", "danger")
+        return redirect(url_for("part_detail", part_number=part_number))
+
+    conn = get_db()
+    conn.execute("""
+        DELETE FROM bom_lines
+        WHERE parent_part=? AND material_part=? AND level=0
+    """, (part_number, material_part))
+
+    # If BOM is now empty, clear the has_bom flag
+    remaining = conn.execute(
+        "SELECT COUNT(*) FROM bom_lines WHERE parent_part=?", (part_number,)
+    ).fetchone()[0]
+    if remaining == 0:
+        conn.execute(
+            "UPDATE parts SET has_bom=0 WHERE part_number=?", (part_number,)
+        )
+
+    # Re-run compliance assessment
+    _auto_assess_part(part_number, conn)
+
+    conn.commit()
+    conn.close()
+
+    flash(f"{material_part} removed from BOM.", "info")
+    return redirect(url_for("part_detail", part_number=part_number))
+
+@app.route("/materials/new", methods=["POST"])
+def new_material():
+    part_number      = request.form.get("part_number", "").strip().upper()
+    description      = request.form.get("description", "").strip()
+    material_series  = request.form.get("material_series", "").strip()
+    series_desc      = request.form.get("series_desc", "").strip()
+    primary_supplier = request.form.get("primary_supplier", "").strip()
+    uom              = request.form.get("uom", "").strip()
+
+    if not part_number:
+        flash("Part number is required.", "danger")
+        return redirect(url_for("materials_list"))
+
+    conn = get_db()
+
+    existing = conn.execute(
+        "SELECT id FROM materials WHERE part_number=?", (part_number,)
+    ).fetchone()
+    if existing:
+        flash(f"Material {part_number} already exists.", "warning")
+        conn.close()
+        return redirect(url_for("materials_list"))
+
+    flags = assess_material_flags(description, material_series)
+
+    conn.execute("""
+        INSERT INTO materials (
+            part_number, description, material_series, series_desc,
+            primary_supplier, uom, risk_level,
+            pfas_flag, svhc_flag, ods_flag, rohs_flag
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    """, (
+        part_number, description, material_series or None,
+        series_desc or None, primary_supplier or None, uom or None,
+        flags["risk_level"], flags["pfas_flag"],
+        flags["svhc_flag"], flags["ods_flag"], flags["rohs_flag"]
+    ))
+
+    conn.commit()
+    conn.close()
+
+    flash(f"Material {part_number} created successfully.", "success")
+    return redirect(url_for("materials_list"))
+
+@app.route("/materials/<path:part_number>")
+def material_detail(part_number):
+    conn = get_db()
+    material = conn.execute(
+        "SELECT * FROM materials WHERE part_number=?", (part_number,)
+    ).fetchone()
+    if not material:
+        flash("Material not found.", "danger")
+        conn.close()
+        return redirect(url_for("materials_list"))
+
+    # Parts that use this material in their BOM
+    used_in = conn.execute("""
+        SELECT p.part_number, p.description, b.qty_per_parent, b.uom
+        FROM bom_lines b
+        JOIN parts p ON p.part_number = b.parent_part
+        WHERE b.material_part = ?
+        ORDER BY p.part_number
+    """, (part_number,)).fetchall()
+
+    conn.close()
+    return render_template("material_detail.html",
+                           material=material, used_in=used_in)
+
+
+@app.route("/materials/<path:part_number>/edit", methods=["POST"])
+def edit_material(part_number):
+    description      = request.form.get("description", "").strip()
+    material_series  = request.form.get("material_series", "").strip()
+    series_desc      = request.form.get("series_desc", "").strip()
+    primary_supplier = request.form.get("primary_supplier", "").strip()
+    uom              = request.form.get("uom", "").strip()
+
+    flags = assess_material_flags(description, material_series)
+
+    conn = get_db()
+    conn.execute("""
+        UPDATE materials SET
+            description      = ?,
+            material_series  = ?,
+            series_desc      = ?,
+            primary_supplier = ?,
+            uom              = ?,
+            risk_level       = ?,
+            pfas_flag        = ?,
+            svhc_flag        = ?,
+            ods_flag         = ?,
+            rohs_flag        = ?,
+            updated_at       = datetime('now')
+        WHERE part_number = ?
+    """, (
+        description, material_series or None, series_desc or None,
+        primary_supplier or None, uom or None,
+        flags["risk_level"], flags["pfas_flag"],
+        flags["svhc_flag"], flags["ods_flag"], flags["rohs_flag"],
+        part_number
+    ))
+    conn.commit()
+    conn.close()
+
+    flash("Material updated successfully.", "success")
+    return redirect(url_for("material_detail", part_number=part_number))
+
+
+@app.route("/materials/<path:part_number>/delete", methods=["POST"])
+def delete_material(part_number):
+    conn = get_db()
+    # Remove from any BOMs first
+    conn.execute(
+        "DELETE FROM bom_lines WHERE material_part=?", (part_number,)
+    )
+    conn.execute(
+        "DELETE FROM materials WHERE part_number=?", (part_number,)
+    )
+    conn.commit()
+    conn.close()
+    flash(f"Material {part_number} deleted.", "info")
+    return redirect(url_for("materials_list"))
+
 @app.route("/materials")
 def materials_list():
     search   = request.args.get("search","").strip()
@@ -2003,6 +2227,18 @@ def delete_document(doc_id):
 # ---------------------------------------------------------------------------
 # API
 # ---------------------------------------------------------------------------
+
+@app.route("/api/materials")
+def api_materials():
+    conn = get_db()
+    rows = conn.execute("""
+        SELECT part_number, description, primary_supplier,
+               material_series, series_desc, risk_level
+        FROM materials
+        ORDER BY part_number
+    """).fetchall()
+    conn.close()
+    return jsonify([dict(r) for r in rows])
 
 @app.route("/api/part/<path:part_number>")
 def api_part(part_number):

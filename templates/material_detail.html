@@ -1,0 +1,294 @@
+{% extends "base.html" %}
+{% block title %}{{ material.part_number }}{% endblock %}
+{% block content %}
+
+<div class="page-header">
+  <div>
+    <h1><i class="bi bi-layers me-2"></i>{{ material.part_number }}</h1>
+    <p class="text-muted mb-0">{{ material.description or 'No description' }}</p>
+  </div>
+  <div class="d-flex gap-2">
+    <a href="/materials" class="btn btn-outline-secondary btn-sm">← Back</a>
+    <button type="button" class="btn btn-danger btn-sm"
+            data-bs-toggle="modal" data-bs-target="#deleteMaterialModal">
+      <i class="bi bi-trash me-1"></i>Delete
+    </button>
+  </div>
+</div>
+
+<div class="row g-3 mb-3">
+
+  <!-- Material Details -->
+  <div class="col-12 col-md-5">
+    <div class="card h-100">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <span>Material Details</span>
+        <div class="d-flex gap-1">
+          <button type="button" class="btn btn-outline-light btn-sm" id="editBtn"
+                  onclick="startEdit()">
+            <i class="bi bi-pencil me-1"></i>Edit
+          </button>
+          <button type="button" class="btn btn-success btn-sm d-none" id="saveBtn"
+                  onclick="saveEdit()">
+            <i class="bi bi-check-lg me-1"></i>Save
+          </button>
+          <button type="button" class="btn btn-outline-light btn-sm d-none" id="cancelBtn"
+                  onclick="cancelEdit()">
+            Cancel
+          </button>
+        </div>
+      </div>
+      <div class="card-body">
+        <form id="editForm" method="post"
+              action="/materials/{{ material.part_number }}/edit">
+          <dl style="font-size:.87rem;">
+
+            <div class="row mb-2">
+              <dt class="col-5 text-muted">Part #</dt>
+              <dd class="col-7 fw-semibold mb-0">{{ material.part_number }}</dd>
+            </div>
+
+            <div class="row mb-2">
+              <dt class="col-5 text-muted">Description</dt>
+              <dd class="col-7 mb-0">
+                <span class="read-val">{{ material.description or '—' }}</span>
+                <input type="text" name="description"
+                       class="edit-val form-control form-control-sm d-none"
+                       value="{{ material.description or '' }}"/>
+              </dd>
+            </div>
+
+            <div class="row mb-2">
+              <dt class="col-5 text-muted">Series</dt>
+              <dd class="col-7 mb-0">
+                <span class="read-val">{{ material.material_series or '—' }}</span>
+                <input type="text" name="material_series"
+                       class="edit-val form-control form-control-sm d-none"
+                       value="{{ material.material_series or '' }}"
+                       placeholder="e.g. 23RM"/>
+              </dd>
+            </div>
+
+            <div class="row mb-2">
+              <dt class="col-5 text-muted">Series Desc</dt>
+              <dd class="col-7 mb-0">
+                <span class="read-val">{{ material.series_desc or '—' }}</span>
+                <input type="text" name="series_desc"
+                       class="edit-val form-control form-control-sm d-none"
+                       value="{{ material.series_desc or '' }}"/>
+              </dd>
+            </div>
+
+            <div class="row mb-2">
+              <dt class="col-5 text-muted">Supplier</dt>
+              <dd class="col-7 mb-0">
+                <span class="read-val">{{ material.primary_supplier or '—' }}</span>
+                <input type="text" name="primary_supplier"
+                       class="edit-val form-control form-control-sm d-none"
+                       value="{{ material.primary_supplier or '' }}"/>
+              </dd>
+            </div>
+
+            <div class="row mb-2">
+              <dt class="col-5 text-muted">UOM</dt>
+              <dd class="col-7 mb-0">
+                <span class="read-val">{{ material.uom or '—' }}</span>
+                <input type="text" name="uom"
+                       class="edit-val form-control form-control-sm d-none"
+                       value="{{ material.uom or '' }}"/>
+              </dd>
+            </div>
+
+            <div class="row mb-2">
+              <dt class="col-5 text-muted">Risk Level</dt>
+              <dd class="col-7 mb-0">
+                {% if material.risk_level == 'High' %}
+                  <span class="risk-dot risk-high"></span>
+                  <span class="text-danger fw-semibold">High</span>
+                {% elif material.risk_level == 'Medium' %}
+                  <span class="risk-dot risk-medium"></span>
+                  <span style="color:#d97706" class="fw-semibold">Medium</span>
+                {% elif material.risk_level == 'Low' %}
+                  <span class="risk-dot risk-low"></span>
+                  <span class="text-success fw-semibold">Low</span>
+                {% else %}
+                  <span class="risk-dot risk-unknown"></span>
+                  <span class="text-muted">Unknown</span>
+                {% endif %}
+                <span class="text-muted text-xs ms-1">(auto-assessed)</span>
+              </dd>
+            </div>
+
+          </dl>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Compliance Flags -->
+  <div class="col-12 col-md-7">
+    <div class="card h-100">
+      <div class="card-header">Compliance Flags</div>
+      <div class="card-body">
+        <p class="text-muted small mb-3">
+          These flags are auto-detected from the material description and series.
+          Editing the description and saving will re-assess them automatically.
+        </p>
+        <div class="row g-2">
+          <div class="col-6">
+            <div class="p-2 rounded d-flex align-items-center gap-2"
+                 style="background:{% if material.pfas_flag %}#fce7f3{% else %}#f8fafc{% endif %};
+                        border:1px solid {% if material.pfas_flag %}#f9a8d4{% else %}#e2e8f0{% endif %};">
+              {% if material.pfas_flag %}
+                <i class="bi bi-exclamation-triangle-fill text-danger"></i>
+                <span class="fw-semibold small">PFAS Detected</span>
+              {% else %}
+                <i class="bi bi-check-circle text-success"></i>
+                <span class="text-muted small">No PFAS Indicators</span>
+              {% endif %}
+            </div>
+          </div>
+          <div class="col-6">
+            <div class="p-2 rounded d-flex align-items-center gap-2"
+                 style="background:{% if material.svhc_flag %}#fef3c7{% else %}#f8fafc{% endif %};
+                        border:1px solid {% if material.svhc_flag %}#fcd34d{% else %}#e2e8f0{% endif %};">
+              {% if material.svhc_flag %}
+                <i class="bi bi-exclamation-triangle-fill text-warning"></i>
+                <span class="fw-semibold small">SVHC Candidate</span>
+              {% else %}
+                <i class="bi bi-check-circle text-success"></i>
+                <span class="text-muted small">No SVHC Indicators</span>
+              {% endif %}
+            </div>
+          </div>
+          <div class="col-6">
+            <div class="p-2 rounded d-flex align-items-center gap-2"
+                 style="background:{% if material.rohs_flag %}#fee2e2{% else %}#f8fafc{% endif %};
+                        border:1px solid {% if material.rohs_flag %}#fca5a5{% else %}#e2e8f0{% endif %};">
+              {% if material.rohs_flag %}
+                <i class="bi bi-exclamation-triangle-fill text-danger"></i>
+                <span class="fw-semibold small">RoHS Flagged</span>
+              {% else %}
+                <i class="bi bi-check-circle text-success"></i>
+                <span class="text-muted small">No RoHS Indicators</span>
+              {% endif %}
+            </div>
+          </div>
+          <div class="col-6">
+            <div class="p-2 rounded d-flex align-items-center gap-2"
+                 style="background:{% if material.ods_flag %}#ede9fe{% else %}#f8fafc{% endif %};
+                        border:1px solid {% if material.ods_flag %}#c4b5fd{% else %}#e2e8f0{% endif %};">
+              {% if material.ods_flag %}
+                <i class="bi bi-exclamation-triangle-fill" style="color:#7c3aed"></i>
+                <span class="fw-semibold small">ODS Flagged</span>
+              {% else %}
+                <i class="bi bi-check-circle text-success"></i>
+                <span class="text-muted small">No ODS Indicators</span>
+              {% endif %}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Used In -->
+<div class="card mb-3">
+  <div class="card-header">
+    <i class="bi bi-diagram-3 me-1"></i>Used In
+    <span class="text-white-50 fw-normal" style="font-size:.75rem;">
+      — parts that include this material in their BOM
+    </span>
+  </div>
+  <div class="card-body p-0">
+    {% if used_in %}
+    <table class="table table-sm table-hover mb-0">
+      <thead>
+        <tr>
+          <th>Part Number</th>
+          <th>Description</th>
+          <th>Qty / Parent</th>
+          <th>UOM</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for u in used_in %}
+        <tr>
+          <td>
+            <a href="/parts/{{ u.part_number }}" class="fw-semibold text-decoration-none"
+               style="color:var(--brand-dark)">
+              {{ u.part_number }}
+            </a>
+          </td>
+          <td class="text-muted text-xs">{{ (u.description or '')[:55] }}</td>
+          <td class="text-xs">{{ u.qty_per_parent }}</td>
+          <td class="text-xs text-muted">{{ u.uom or '—' }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div class="text-center py-4 text-muted small">
+      <i class="bi bi-diagram-3 fs-3 d-block mb-1 opacity-25"></i>
+      This material is not used in any BOM.
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Delete Modal -->
+<div class="modal fade" id="deleteMaterialModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header" style="background:#dc2626;">
+        <h5 class="modal-title text-white">
+          <i class="bi bi-exclamation-triangle me-2"></i>Delete Material
+        </h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p>Are you sure you want to permanently delete <strong>{{ material.part_number }}</strong>?</p>
+        <p class="text-muted small mb-0">
+          This will also remove it from any BOMs it appears in.
+          This cannot be undone.
+        </p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary btn-sm"
+                data-bs-dismiss="modal">Cancel</button>
+        <form method="post" action="/materials/{{ material.part_number }}/delete" class="d-inline">
+          <button type="submit" class="btn btn-danger btn-sm">
+            <i class="bi bi-trash me-1"></i>Yes, Delete
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+function startEdit() {
+  document.querySelectorAll('.read-val').forEach(el => el.classList.add('d-none'));
+  document.querySelectorAll('.edit-val').forEach(el => el.classList.remove('d-none'));
+  document.getElementById('editBtn').classList.add('d-none');
+  document.getElementById('saveBtn').classList.remove('d-none');
+  document.getElementById('cancelBtn').classList.remove('d-none');
+}
+
+function cancelEdit() {
+  document.querySelectorAll('.read-val').forEach(el => el.classList.remove('d-none'));
+  document.querySelectorAll('.edit-val').forEach(el => el.classList.add('d-none'));
+  document.getElementById('editBtn').classList.remove('d-none');
+  document.getElementById('saveBtn').classList.add('d-none');
+  document.getElementById('cancelBtn').classList.add('d-none');
+}
+
+function saveEdit() {
+  document.getElementById('editForm').submit();
+}
+</script>
+{% endblock %}
