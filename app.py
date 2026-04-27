@@ -952,6 +952,62 @@ def hidden_parts():
     conn.close()
     return render_template("hidden_parts.html", parts=parts)
 
+@app.route("/parts/bulk-hide", methods=["POST"])
+def bulk_hide_parts():
+    part_numbers = request.form.getlist("part_numbers")
+    if not part_numbers:
+        flash("No parts selected.", "warning")
+        return redirect(request.referrer or url_for("parts_list"))
+    conn = get_db()
+    conn.executemany(
+        "UPDATE parts SET is_hidden=1 WHERE part_number=?",
+        [(pn,) for pn in part_numbers]
+    )
+    conn.commit()
+    conn.close()
+    flash(f"{len(part_numbers)} part(s) hidden.", "info")
+    return redirect(request.referrer or url_for("parts_list"))
+
+
+@app.route("/parts/bulk-delete", methods=["POST"])
+def bulk_delete_parts():
+    part_numbers = request.form.getlist("part_numbers")
+    if not part_numbers:
+        flash("No parts selected.", "warning")
+        return redirect(request.referrer or url_for("parts_list"))
+    conn = get_db()
+    for pn in part_numbers:
+        # Delete all related records first
+        conn.execute("DELETE FROM compliance_status WHERE part_number=?", (pn,))
+        conn.execute("DELETE FROM fmd_substances    WHERE part_number=?", (pn,))
+        conn.execute("DELETE FROM fmd_files         WHERE part_number=?", (pn,))
+        conn.execute("DELETE FROM document_parts    WHERE part_number=?", (pn,))
+        conn.execute("DELETE FROM parts             WHERE part_number=?", (pn,))
+    conn.commit()
+    conn.close()
+    flash(f"{len(part_numbers)} part(s) permanently deleted.", "danger")
+    return redirect(request.referrer or url_for("parts_list"))
+
+
+@app.route("/parts/bulk-class", methods=["POST"])
+def bulk_update_class():
+    part_numbers = request.form.getlist("part_numbers")
+    new_class    = request.form.get("new_class", "").strip()
+    if not part_numbers:
+        flash("No parts selected.", "warning")
+        return redirect(request.referrer or url_for("parts_list"))
+    if not new_class:
+        flash("No class selected.", "warning")
+        return redirect(request.referrer or url_for("parts_list"))
+    conn = get_db()
+    conn.executemany(
+        "UPDATE parts SET part_class=? WHERE part_number=?",
+        [(new_class, pn) for pn in part_numbers]
+    )
+    conn.commit()
+    conn.close()
+    flash(f"{len(part_numbers)} part(s) updated to '{new_class}'.", "success")
+    return redirect(request.referrer or url_for("parts_list"))
 
 @app.route("/parts/<path:part_number>/hide", methods=["POST"])
 def hide_part(part_number):

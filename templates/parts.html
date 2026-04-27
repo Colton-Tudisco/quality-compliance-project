@@ -65,6 +65,54 @@
   </div>
 </div>
 
+<!-- Bulk Action Toolbar — hidden until checkboxes are selected -->
+<div id="bulkToolbar" class="card mb-3 d-none">
+  <div class="card-body py-2 px-3 d-flex align-items-center gap-3 flex-wrap">
+    <span class="fw-semibold small text-muted">
+      <span id="bulkCount">0</span> part(s) selected
+    </span>
+    <div class="d-flex gap-2 flex-wrap">
+
+      <!-- Change Class -->
+      <form method="post" action="/parts/bulk-class" id="bulkClassForm">
+        <div id="bulkPartInputsClass"></div>
+        <div class="d-flex gap-1 align-items-center">
+          <select name="new_class" class="form-select form-select-sm" style="width:160px;">
+            <option value="">— Change Class —</option>
+            <option value="Finished Goods">Finished Goods</option>
+            <option value="Semi-Finished Goods">Semi-Finished Goods</option>
+            <option value="Raw Materials">Raw Materials</option>
+            <option value="Consumables">Consumables</option>
+          </select>
+          <button type="submit" class="btn btn-outline-primary btn-sm"
+                  onclick="return injectPartsAndConfirm('bulkClassForm', 'bulkPartInputsClass', 'Update class for selected parts?')">
+            Apply
+          </button>
+        </div>
+      </form>
+
+      <!-- Hide -->
+      <form method="post" action="/parts/bulk-hide" id="bulkHideForm">
+        <div id="bulkPartInputsHide"></div>
+        <button type="submit" class="btn btn-outline-secondary btn-sm"
+                onclick="return injectPartsAndConfirm('bulkHideForm', 'bulkPartInputsHide', 'Hide selected parts?')">
+          <i class="bi bi-eye-slash me-1"></i>Hide
+        </button>
+      </form>
+
+      <!-- Delete -->
+      <form method="post" action="/parts/bulk-delete" id="bulkDeleteForm">
+        <div id="bulkPartInputsDelete"></div>
+        <button type="submit" class="btn btn-outline-danger btn-sm"
+                onclick="return injectPartsAndConfirm('bulkDeleteForm', 'bulkPartInputsDelete', 'PERMANENTLY DELETE selected parts? This cannot be undone.')">
+          <i class="bi bi-trash me-1"></i>Delete
+        </button>
+      </form>
+
+    </div>
+  </div>
+</div>
+
 <div class="card">
   <div class="card-body p-0">
     {% if parts %}
@@ -72,6 +120,9 @@
       <table class="table table-hover table-sm align-middle mb-0">
         <thead>
           <tr>
+            <th style="width:36px;">
+              <input type="checkbox" id="selectAll" class="form-check-input"/>
+            </th>
             <th>Part Number</th>
             <th>Description</th>
             <th>Class</th>
@@ -87,6 +138,10 @@
         <tbody>
           {% for p in parts %}
           <tr>
+            <td>
+              <input type="checkbox" class="form-check-input part-checkbox"
+                    value="{{ p.part_number }}"/>
+            </td>
             <td>
               <a href="/parts/{{ p.part_number }}" class="fw-semibold text-decoration-none" style="color:var(--brand-dark)">
                 {{ p.part_number }}
@@ -256,5 +311,49 @@ document.getElementById('createPartBtn').addEventListener('click', function() {
     alert('Something went wrong. Please try again.');
   });
 });
+
+// ── Bulk selection ────────────────────────────────────────────────────────
+const selectAll   = document.getElementById('selectAll');
+const toolbar     = document.getElementById('bulkToolbar');
+const bulkCount   = document.getElementById('bulkCount');
+
+function getChecked() {
+  return [...document.querySelectorAll('.part-checkbox:checked')].map(cb => cb.value);
+}
+
+function updateToolbar() {
+  const checked = getChecked();
+  bulkCount.textContent = checked.length;
+  toolbar.classList.toggle('d-none', checked.length === 0);
+}
+
+selectAll.addEventListener('change', function() {
+  document.querySelectorAll('.part-checkbox').forEach(cb => cb.checked = this.checked);
+  updateToolbar();
+});
+
+document.querySelectorAll('.part-checkbox').forEach(cb => {
+  cb.addEventListener('change', function() {
+    selectAll.checked = document.querySelectorAll('.part-checkbox:checked').length ===
+                        document.querySelectorAll('.part-checkbox').length;
+    updateToolbar();
+  });
+});
+
+function injectPartsAndConfirm(formId, containerId, message) {
+  const checked = getChecked();
+  if (checked.length === 0) { alert('No parts selected.'); return false; }
+  if (!confirm(message)) return false;
+  const container = document.getElementById(containerId);
+  container.innerHTML = '';
+  checked.forEach(pn => {
+    const input = document.createElement('input');
+    input.type  = 'hidden';
+    input.name  = 'part_numbers';
+    input.value = pn;
+    container.appendChild(input);
+  });
+  return true;
+}
 </script>
 {% endblock %}
