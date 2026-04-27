@@ -140,6 +140,8 @@ def init_db():
             doc_required    INTEGER DEFAULT 0,
             doc_suggested   INTEGER DEFAULT 0,
             last_assessed   TEXT,
+            is_override     INTEGER DEFAULT 0,
+            override_reason TEXT,
             UNIQUE(part_number, standard)
         );
 
@@ -1420,6 +1422,33 @@ def fmd_bulk_process():
     conn.commit()
     conn.close()
     return jsonify({'results': processed})
+
+@app.route("/parts/<path:part_number>/compliance/override", methods=["POST"])
+def override_compliance(part_number):
+    standard        = request.form.get("standard", "").strip()
+    new_status      = request.form.get("status", "").strip()
+    override_reason = request.form.get("override_reason", "").strip()
+
+    if not standard or not new_status:
+        flash("Standard and status are required.", "danger")
+        return redirect(url_for("part_detail", part_number=part_number))
+
+    conn = get_db()
+    conn.execute("""
+        INSERT INTO compliance_status
+            (part_number, standard, status, is_override, override_reason, last_assessed)
+        VALUES (?, ?, ?, 1, ?, datetime('now'))
+        ON CONFLICT(part_number, standard)
+        DO UPDATE SET status          = excluded.status,
+                      is_override     = 1,
+                      override_reason = excluded.override_reason,
+                      last_assessed   = excluded.last_assessed
+    """, (part_number, standard, new_status, override_reason or None))
+    conn.commit()
+    conn.close()
+
+    flash(f"{standard} status manually set to '{new_status}'.", "success")
+    return redirect(url_for("part_detail", part_number=part_number))
 
 @app.route("/parts/<path:part_number>/fmd/upload", methods=["POST"])
 def upload_fmd(part_number):

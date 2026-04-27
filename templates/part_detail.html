@@ -194,9 +194,26 @@
       <div class="card-body d-flex flex-column align-items-center justify-content-center py-3">
         <div class="mb-1">{{ status_badge(s.status if s else None) }}</div>
         <div class="text-muted text-xs mt-1">{{ ref }}</div>
-        {% if s and s.notes %}
+        {% if s and s.is_override %}
+        <div class="text-xs mt-1" style="color:#d97706;">
+          <i class="bi bi-pencil-fill me-1"></i>Manual override
+        </div>
+        {% endif %}
+        {% if s and s.override_reason %}
+        <div class="text-xs mt-1 text-muted text-center px-1">{{ s.override_reason }}</div>
+        {% endif %}
+        {% if s and s.notes and not s.is_override %}
         <div class="text-xs mt-2 text-start" style="color:#374151">{{ s.notes }}</div>
         {% endif %}
+        <button type="button"
+                class="btn btn-outline-secondary btn-sm mt-2 py-0 px-2"
+                style="font-size:.7rem;"
+                data-bs-toggle="modal"
+                data-bs-target="#overrideModal"
+                data-standard="{{ std_name }}"
+                data-current="{{ s.status if s else 'Unknown' }}">
+          <i class="bi bi-pencil me-1"></i>Override
+        </button>
       </div>
     </div>
   </div>
@@ -469,6 +486,61 @@
   </div>
 </div>
 
+<!-- Compliance Override Modal -->
+<div class="modal fade" id="overrideModal" tabindex="-1" aria-labelledby="overrideModalLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header" style="background:var(--brand-dark);">
+        <h5 class="modal-title text-white" id="overrideModalLabel">
+          <i class="bi bi-pencil me-2"></i>Override Compliance Status
+        </h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <form method="post" action="/parts/{{ part.part_number }}/compliance/override">
+        <div class="modal-body">
+          <input type="hidden" name="standard" id="overrideStandard"/>
+          <div class="mb-3">
+            <label class="form-label fw-semibold small">Standard</label>
+            <input type="text" id="overrideStandardDisplay" class="form-control form-control-sm"
+                   readonly style="background:#f8fafc;"/>
+          </div>
+          <div class="mb-3">
+            <label class="form-label fw-semibold small">New Status <span class="text-danger">*</span></label>
+            <select name="status" class="form-select form-select-sm" id="overrideStatus">
+              <option value="Compliant">Compliant</option>
+              <option value="Non-Compliant">Non-Compliant</option>
+              <option value="Needs Review">Needs Review</option>
+              <option value="Exempt">Exempt</option>
+              <option value="PFAS-Free">PFAS-Free</option>
+              <option value="Contains PFAS">Contains PFAS</option>
+              <option value="Contains SVHC">Contains SVHC</option>
+              <option value="Contains ODS">Contains ODS</option>
+              <option value="Unknown">Unknown</option>
+            </select>
+          </div>
+          <div class="mb-3">
+            <label class="form-label fw-semibold small">Reason / Supporting Document</label>
+            <textarea name="override_reason" class="form-control form-control-sm" rows="3"
+                      placeholder="e.g. Supplier letter dated March 2025, ref SEM-2025-0312 confirms RoHS compliance."></textarea>
+            <div class="form-text">This will be shown on the part detail page as audit context.</div>
+          </div>
+          <div class="alert alert-warning py-1 px-2 small">
+            <i class="bi bi-exclamation-triangle me-1"></i>
+            Manual overrides take precedence over auto-assessed results. Re-uploading an FMD will reset the status.
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary btn-sm"
+                  data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-primary btn-sm">
+            <i class="bi bi-check-lg me-1"></i>Save Override
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
 <!-- Delete Confirmation Modal -->
 <div class="modal fade" id="deletePartModal" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog">
@@ -517,6 +589,19 @@ function cancelEdit() {
 function saveEdit() {
   document.getElementById('editForm').submit();
 }
+
+// Populate override modal with the standard and current status
+document.getElementById('overrideModal').addEventListener('show.bs.modal', function(event) {
+  const btn      = event.relatedTarget;
+  const standard = btn.getAttribute('data-standard');
+  const current  = btn.getAttribute('data-current');
+  document.getElementById('overrideStandard').value        = standard;
+  document.getElementById('overrideStandardDisplay').value = standard;
+  const select = document.getElementById('overrideStatus');
+  for (let opt of select.options) {
+    opt.selected = opt.value === current;
+  }
+});
 </script>
 {% endblock %}
 
