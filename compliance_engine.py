@@ -1,14 +1,19 @@
 """
 Compliance Engine — CAS-number-based regulatory determination
-Replaces keyword heuristics with authoritative reference table lookups.
 
-Standards covered:
-  - RoHS      EU Directive 2011/65/EU + 2015/863/EU (Annex II, 10 substances)
-  - REACH     EC 1907/2006 SVHC Candidate List (Article 59)
-  - PFAS      OECD/EPA per- and polyfluoroalkyl substance families
-  - Montreal  Montreal Protocol Annex A/B/C/E ozone depleting substances
+Standard versions (update these comments when reference data is updated):
+  RoHS:             EU Directive 2011/65/EU + 2015/863/EU — Annex II
+                    Current: 10 substances + 4 phthalates (RoHS 3, July 2019)
+  REACH SVHC:       ECHA Candidate List — January 2025
+                    Current: 247 substances total, partial CAS coverage included
+  PFAS:             OECD/EPA broad definition — 2021
+                    Current: CAS-based + name-indicator detection
+  Montreal Protocol:Montreal Protocol Annex A/B/C/E — Kigali Amendment 2019
+                    Current: CFCs, HCFCs, Halons, Methyl Bromide
+
+TODO (end of v1): Wire compliance checks to pull SVHC_CAS from regulatory_versions
+                  + svhc_list DB tables. Add user notification banner on version update.
 """
-
 
 # ---------------------------------------------------------------------------
 # Reference Tables

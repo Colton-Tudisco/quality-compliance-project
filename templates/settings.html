@@ -192,6 +192,45 @@
       </div>
     </div>
 
+    <!-- Regulatory Standards -->
+    <div class="card mb-3">
+      <div class="card-header">
+        <i class="bi bi-shield-check me-1"></i>Regulatory Standards
+      </div>
+      <div class="card-body p-0">
+        {% if reg_versions %}
+        <table class="table table-sm mb-0">
+          <thead>
+            <tr>
+              <th>Standard</th>
+              <th>Version</th>
+              <th>Updated</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for v in reg_versions %}
+            <tr>
+              <td class="fw-semibold text-xs">{{ v.standard }}</td>
+              <td class="text-xs text-muted">{{ v.version }}</td>
+              <td class="text-xs text-muted">{{ v.updated_at }}</td>
+            </tr>
+            {% if v.notes %}
+            <tr>
+              <td colspan="3" class="text-xs text-muted py-0 pb-2 px-3"
+                  style="font-style:italic; border-top:none;">
+                {{ v.notes }}
+              </td>
+            </tr>
+            {% endif %}
+            {% endfor %}
+          </tbody>
+        </table>
+        {% else %}
+        <p class="text-muted text-xs p-3 mb-0">No regulatory versions found.</p>
+        {% endif %}
+      </div>
+    </div>
+
     <!-- About -->
     <div class="card">
       <div class="card-header">

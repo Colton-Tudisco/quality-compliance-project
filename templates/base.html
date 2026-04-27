@@ -187,6 +187,30 @@
   </aside>
 
   <main class="main-content">
+{% if regulatory_updates %}
+  {% for update in regulatory_updates %}
+  <div class="alert d-flex align-items-start justify-content-between py-2 px-3 mb-2"
+       style="background:#fffbeb; border-left:4px solid #d97706; border-radius:8px;">
+    <div>
+      <strong><i class="bi bi-shield-exclamation me-1 text-warning"></i>Compliance Update:</strong>
+      <strong>{{ update.standard }}</strong> reference data has been updated to
+      <strong>{{ update.version }}</strong>
+      {% if update.notes %}
+      <span class="text-muted small ms-1">— {{ update.notes }}</span>
+      {% endif %}
+    </div>
+    <form method="post" action="/settings/acknowledge-version" class="ms-3 flex-shrink-0">
+      <input type="hidden" name="standard" value="{{ update.standard }}"/>
+      <input type="hidden" name="version"  value="{{ update.version }}"/>
+      <button type="submit" class="btn btn-sm btn-outline-warning py-0 px-2">
+        Got it
+      </button>
+    </form>
+  </div>
+  {% endfor %}
+{% endif %}
+
+
 {% with messages = get_flashed_messages(with_categories=true) %}
   {% if messages %}
     {% for cat, msg in messages %}

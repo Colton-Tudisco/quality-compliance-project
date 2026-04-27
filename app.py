@@ -46,13 +46,38 @@ ROHS_KEYWORDS    = ["lead", "mercury", "cadmium", "chromium vi", "pbde", "pbb",
 # ---------------------------------------------------------------------------
 # DB helpers
 # ---------------------------------------------------------------------------
-
 def get_db():
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
     return conn
 
+def get_unacknowledged_versions():
+    """
+    Returns a list of regulatory versions the user hasn't acknowledged yet.
+    Each item is a dict with standard, version, updated_at, and notes.
+    """
+    conn = get_db()
+    rows = conn.execute("""
+        SELECT rv.standard, rv.version, rv.updated_at, rv.notes
+        FROM regulatory_versions rv
+        WHERE NOT EXISTS (
+            SELECT 1 FROM user_acknowledged_versions uav
+            WHERE uav.standard = rv.standard
+            AND uav.version = rv.version
+        )
+        ORDER BY rv.updated_at DESC
+    """).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+@app.context_processor
+def inject_regulatory_notifications():
+    try:
+        updates = get_unacknowledged_versions()
+    except Exception:
+        updates = []
+    return dict(regulatory_updates=updates)
 
 def init_db():
     conn = get_db()
@@ -206,6 +231,22 @@ def init_db():
             staged_at       TEXT DEFAULT (datetime('now')),
             notes           TEXT
         );
+
+        CREATE TABLE IF NOT EXISTS regulatory_versions (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            standard    TEXT UNIQUE NOT NULL,
+            version     TEXT NOT NULL,
+            updated_at  TEXT NOT NULL,
+            notes       TEXT        
+         );
+                    
+        CREATE TABLE IF NOT EXISTS user_acknowledged_versions (
+            id           INTEGER PRIMARY KEY AUTOINCREMENT,
+            standard     TEXT NOT NULL,
+            version      TEXT NOT NULL,
+            acknowledged_at TEXT DEFAULT (datetime('now')),
+            UNIQUE(standard, version)
+        );
     """)
 
     conn.commit()
@@ -226,6 +267,19 @@ def init_db():
             INSERT OR IGNORE INTO reference_data (category, value)
             VALUES (?, ?)
         """, (category, value))
+    
+    # Seed regulatory versions if not already present
+    regulatory_defaults = [
+        ("RoHS",             "2015/863/EU — July 2019",  "2019-07-22", "RoHS 3 — added 4 phthalates (DEHP, BBP, DBP, DIBP) to original 6 restricted substances."),
+        ("REACH SVHC",       "January 2025",             "2025-01-21", "247 substances on candidate list. 5 new substances added including octamethyltrisiloxane and perfluamine."),
+        ("PFAS",             "OECD Definition — 2021",   "2021-01-01", "Based on OECD/EPA broad PFAS definition. CAS-based and name-based detection."),
+        ("Montreal Protocol","2019 Kigali Amendment",    "2019-01-01", "Covers Annex A/B/C/E ODS substances including CFCs, HCFCs, and Halons."),
+    ]
+    for standard, version, updated_at, notes in regulatory_defaults:
+        conn.execute("""
+            INSERT OR IGNORE INTO regulatory_versions (standard, version, updated_at, notes)
+            VALUES (?, ?, ?, ?)
+        """, (standard, version, updated_at, notes))
 
     # Seed default settings if not already present
     default_settings = [
@@ -531,7 +585,7 @@ def settings_page():
         SELECT * FROM reference_data ORDER BY category, sort_order, value
     """).fetchall()
 
-    # Group reference data by category for the template
+# Group reference data by category for the template
     from itertools import groupby
     ref_grouped = {}
     for row in ref_data:
@@ -540,10 +594,15 @@ def settings_page():
             ref_grouped[cat] = []
         ref_grouped[cat].append(dict(row))
 
+    reg_versions = conn.execute(
+        "SELECT * FROM regulatory_versions ORDER BY standard"
+    ).fetchall()
+
     conn.close()
     return render_template("settings.html",
                            settings=settings,
-                           ref_grouped=ref_grouped)
+                           ref_grouped=ref_grouped,
+                           reg_versions=reg_versions)
 
 @app.route("/")
 def dashboard():
@@ -845,6 +904,20 @@ def delete_pending_part(id):
 
     flash("Pending part discarded.", "info")
     return redirect(url_for("pending_parts"))
+
+@app.route("/settings/acknowledge-version", methods=["POST"])
+def acknowledge_version():
+    standard = request.form.get("standard")
+    version  = request.form.get("version")
+    if standard and version:
+        conn = get_db()
+        conn.execute("""
+            INSERT OR IGNORE INTO user_acknowledged_versions (standard, version)
+            VALUES (?, ?)
+        """, (standard, version))
+        conn.commit()
+        conn.close()
+    return redirect(request.referrer or url_for("dashboard"))
 
 @app.route("/parts/hidden")
 def hidden_parts():
