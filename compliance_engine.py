@@ -10,6 +10,11 @@ Standard versions (update these comments when reference data is updated):
                     Current: CAS-based + name-indicator detection
   Montreal Protocol:Montreal Protocol Annex A/B/C/E — Kigali Amendment 2019
                     Current: CFCs, HCFCs, Halons, Methyl Bromide
+  Cal Prop 65:      OEHHA Proposition 65 List — June 2024
+                    Current: ~30 most common industrial/electronics substances
+  China RoHS:       GB/T 26572-2011 — 6 restricted substances, Chinese market EEE
+  TSCA:             EPA TSCA Section 6 — current rules through 2024
+  Halogen-Free:     IEC 61249-2-21 / JEDEC JESD97 — Cl<900, Br<900, Total<1500 ppm
 
 TODO (end of v1): Wire compliance checks to pull SVHC_CAS from regulatory_versions
                   + svhc_list DB tables. Add user notification banner on version update.
@@ -103,6 +108,121 @@ ODS_CAS = {
     "71-55-6":   "Methyl chloroform (1,1,1-trichloroethane)",
 }
 
+# California Proposition 65 — OEHHA list (June 2024 update)
+# CAS number → "description (type)" — most common substances in electronics/industrial parts
+# Full list: https://oehha.ca.gov/proposition-65/proposition-65-list
+# Detection: CAS-match only. Status: "Compliant" | "Contains Prop 65 Substances"
+PROP65_CAS = {
+    "7439-92-1":  "Lead and lead compounds (reproductive toxin, developmental toxin)",
+    "7439-97-6":  "Mercury and mercury compounds (reproductive toxin)",
+    "7440-43-9":  "Cadmium and cadmium compounds (carcinogen)",
+    "18540-29-9": "Hexavalent chromium compounds (carcinogen)",
+    "117-81-7":   "Bis(2-Ethylhexyl) phthalate DEHP (reproductive toxin)",
+    "85-68-7":    "Benzyl butyl phthalate BBP (reproductive toxin)",
+    "84-74-2":    "Dibutyl phthalate DBP (reproductive toxin)",
+    "84-69-5":    "Diisobutyl phthalate DIBP (reproductive toxin)",
+    "80-05-7":    "Bisphenol A (BPA) — reproductive toxin",
+    "71-43-2":    "Benzene (carcinogen)",
+    "108-88-3":   "Toluene (developmental toxin, reproductive toxin)",
+    "100-42-5":   "Styrene (carcinogen)",
+    "75-09-2":    "Methylene chloride (carcinogen)",
+    "79-01-6":    "Trichloroethylene TCE (carcinogen)",
+    "127-18-4":   "Tetrachloroethylene PCE (carcinogen)",
+    "56-23-5":    "Carbon tetrachloride (carcinogen)",
+    "106-99-0":   "1,3-Butadiene (carcinogen)",
+    "7440-38-2":  "Arsenic and inorganic arsenic compounds (carcinogen)",
+    "7440-41-7":  "Beryllium and beryllium compounds (carcinogen)",
+    "7440-02-0":  "Nickel and certain nickel compounds (carcinogen)",
+    "1336-36-3":  "Polychlorinated biphenyls PCBs (carcinogen)",
+    "1333-86-4":  "Carbon black (airborne, unbound — carcinogen)",
+    "7664-93-9":  "Sulfuric acid (carcinogen)",
+    "75-21-8":    "Ethylene oxide (carcinogen, reproductive toxin)",
+    "1746-01-6":  "TCDD dioxin (carcinogen)",
+    "309-00-2":   "Aldrin (carcinogen)",
+    "50-29-3":    "DDT (carcinogen)",
+    "60-57-1":    "Dieldrin (carcinogen)",
+    "7789-06-2":  "Strontium chromate (carcinogen)",
+    "96-45-7":    "Ethylene thiourea (carcinogen, developmental toxin)",
+}
+
+# China RoHS — GB/T 26572-2011 — 6 restricted substances for EEE sold in China
+# CAS → (human name, threshold_ppm in homogeneous material)
+# Same 6 base substances as EU RoHS; threshold differs only for Cd (100 ppm vs EU's 100 ppm — same)
+# PBB/PBDE thresholds same as EU RoHS; all non-Cd thresholds are 1000 ppm
+# Status: "Compliant" | "Non-Compliant" | "Needs Review"
+CHINA_ROHS_SUBSTANCES = {
+    "7439-92-1":  ("Lead (Pb)",                          1000),
+    "7439-97-6":  ("Mercury (Hg)",                       1000),
+    "7440-43-9":  ("Cadmium (Cd)",                        100),
+    "18540-29-9": ("Hexavalent Chromium (Cr VI)",         1000),
+    "59536-65-1": ("Polybrominated Biphenyls (PBB)",      1000),
+    "32534-81-9": ("Decabromodiphenyl Ether (PBDE)",      1000),
+}
+
+# TSCA Section 6 — EPA restricted/prohibited substances (current through 2024)
+# CAS → restriction description
+# Detection: CAS-match only. Any match → "Restricted Substance Detected"
+TSCA_CAS = {
+    "1336-36-3":   "Polychlorinated biphenyls (PCBs) — prohibited manufacture/processing/distribution",
+    "12001-28-4":  "Crocidolite asbestos — prohibited",
+    "12172-73-5":  "Amosite asbestos — prohibited",
+    "77536-66-4":  "Actinolite asbestos — prohibited",
+    "77536-67-5":  "Anthophyllite asbestos — prohibited",
+    "77536-68-6":  "Tremolite asbestos — prohibited",
+    "132207-32-0": "Chrysotile asbestos — prohibited (2024 final rule)",
+    "75-09-2":     "Methylene chloride — restricted consumer use (aerosol degreasing banned)",
+    "1120-71-4":   "1,3-Propane sultone — restricted",
+    "79-01-6":     "Trichloroethylene TCE — restricted use (vapor degreasing banned)",
+    "127-18-4":    "Perchloroethylene PCE — restricted use",
+    "14808-60-7":  "Silica, crystalline respirable — risk management rule active",
+}
+
+# Halogen-Free — IEC 61249-2-21 / JEDEC JESD97
+# Thresholds: Cl < 900 ppm (0.09%), Br < 900 ppm (0.09%), Total halogens < 1500 ppm (0.15%)
+# Measured against homogeneous material (weight_on_hm_pct)
+# Status: "Halogen-Free" | "Contains Halogens" | "Needs Review"
+
+# CAS numbers of predominantly chlorine-containing compounds
+HALOGEN_CL_CAS = {
+    "75-69-4",    # CFC-11 — also in ODS_CAS
+    "75-71-8",    # CFC-12 — also in ODS_CAS
+    "76-13-1",    # CFC-113 — also in ODS_CAS
+    "56-23-5",    # Carbon tetrachloride
+    "71-55-6",    # 1,1,1-trichloroethane
+    "79-01-6",    # Trichloroethylene
+    "127-18-4",   # Tetrachloroethylene
+    "75-09-2",    # Methylene chloride
+    "108-90-7",   # Chlorobenzene
+    "67-66-3",    # Chloroform (trichloromethane)
+    "75-00-3",    # Chloroethane
+    "106-43-4",   # 4-Chlorotoluene
+}
+
+# CAS numbers of predominantly bromine-containing compounds
+HALOGEN_BR_CAS = {
+    "59536-65-1",  # PBB — also in RoHS/China RoHS
+    "32534-81-9",  # DecaBDE — also in RoHS/China RoHS
+    "36483-60-0",  # OctaBDE — also in RoHS
+    "40088-47-9",  # HexaBDE — also in RoHS
+    "79-94-7",     # TBBPA (tetrabromobisphenol A)
+    "75-25-2",     # Bromoform
+    "74-97-5",     # Bromochloromethane — also in ODS_CAS
+    "75-63-8",     # Bromotrifluoromethane (Halon-1301) — also in ODS_CAS
+    "74-83-9",     # Methyl bromide — also in ODS_CAS
+    "75-26-3",     # 2-Bromopropane
+    "75-27-4",     # Bromodichloromethane
+}
+
+# Name-based indicators for halogen detection when CAS is missing/proprietary
+HALOGEN_CL_NAME_INDICATORS = [
+    "chlor", "pvc", "polyvinyl chloride", "hcfc", "cfc", "pcb",
+    "trichloroethyl", "perchloroethyl", "chloroform", "chlorobenz",
+]
+HALOGEN_BR_NAME_INDICATORS = [
+    "brom", "pbde", "pbb", "tbbpa", "flame retard", "decabromodiphenyl",
+    "brominated", "bromoform", "halon",
+]
+
 
 # ---------------------------------------------------------------------------
 # Core determination function
@@ -135,11 +255,18 @@ def determine_compliance(substances):
     """
 
     results = {
-        "RoHS":              {"status": "Compliant",  "flags": []},
-        "REACH":             {"status": "Compliant",  "flags": []},
-        "PFAS":              {"status": "PFAS-Free",  "flags": []},
-        "Montreal Protocol": {"status": "Compliant",  "flags": []},
+        "RoHS":              {"status": "Compliant",      "flags": []},
+        "REACH":             {"status": "Compliant",      "flags": []},
+        "PFAS":              {"status": "PFAS-Free",      "flags": []},
+        "Montreal Protocol": {"status": "Compliant",      "flags": []},
+        "Cal Prop 65":       {"status": "Compliant",      "flags": []},
+        "China RoHS":        {"status": "Compliant",      "flags": []},
+        "TSCA":              {"status": "Compliant",      "flags": []},
+        "Halogen-Free":      {"status": "Halogen-Free",   "flags": []},
     }
+
+    total_cl_ppm = 0.0
+    total_br_ppm = 0.0
 
     for sub in substances:
         cas         = (sub.get("cas_number")          or "").strip()
@@ -209,6 +336,75 @@ def determine_compliance(substances):
                 f"{name} (CAS {cas}) — {ODS_CAS[cas]}"
             )
 
+        # --- California Prop 65 ---
+        if cas in PROP65_CAS:
+            results["Cal Prop 65"]["status"] = "Contains Prop 65 Substances"
+            results["Cal Prop 65"]["flags"].append(
+                f"{name} (CAS {cas}) — {PROP65_CAS[cas]}"
+            )
+
+        # --- China RoHS ---
+        if cas in CHINA_ROHS_SUBSTANCES:
+            label, threshold_ppm = CHINA_ROHS_SUBSTANCES[cas]
+            threshold_pct = threshold_ppm / 10000
+            if pct_on_hm > threshold_pct:
+                results["China RoHS"]["status"] = "Non-Compliant"
+                results["China RoHS"]["flags"].append(
+                    f"{label} (CAS {cas}) at {pct_on_hm}% in '{mat_name}' "
+                    f"— exceeds {threshold_ppm} ppm limit (GB/T 26572)"
+                )
+            else:
+                results["China RoHS"]["flags"].append(
+                    f"{label} (CAS {cas}) present at {pct_on_hm}% in '{mat_name}'"
+                    f" — within {threshold_ppm} ppm limit"
+                )
+
+        # --- TSCA Section 6 ---
+        if cas in TSCA_CAS:
+            results["TSCA"]["status"] = "Restricted Substance Detected"
+            results["TSCA"]["flags"].append(
+                f"{name} (CAS {cas}) — {TSCA_CAS[cas]}"
+            )
+
+        # --- Halogen-Free ---
+        # Accumulate Cl/Br ppm from known halogenated substances and name indicators.
+        # pct_on_hm is % of homogeneous material; multiply by 10000 to get ppm.
+        if cas in HALOGEN_CL_CAS:
+            total_cl_ppm += pct_on_hm * 10000
+            results["Halogen-Free"]["flags"].append(
+                f"Cl-containing: {name} (CAS {cas}) at {pct_on_hm:.4f}% HM"
+            )
+        elif any(ind in name.lower() for ind in HALOGEN_CL_NAME_INDICATORS):
+            total_cl_ppm += pct_on_hm * 10000
+            results["Halogen-Free"]["flags"].append(
+                f"Cl-indicator in name: {name} at {pct_on_hm:.4f}% HM (CAS: {cas or 'not provided'})"
+            )
+
+        if cas in HALOGEN_BR_CAS:
+            total_br_ppm += pct_on_hm * 10000
+            results["Halogen-Free"]["flags"].append(
+                f"Br-containing: {name} (CAS {cas}) at {pct_on_hm:.4f}% HM"
+            )
+        elif any(ind in name.lower() for ind in HALOGEN_BR_NAME_INDICATORS):
+            total_br_ppm += pct_on_hm * 10000
+            results["Halogen-Free"]["flags"].append(
+                f"Br-indicator in name: {name} at {pct_on_hm:.4f}% HM (CAS: {cas or 'not provided'})"
+            )
+
+    # --- Halogen-Free final threshold evaluation ---
+    total_halogen_ppm = total_cl_ppm + total_br_ppm
+    if total_cl_ppm >= 900 or total_br_ppm >= 900 or total_halogen_ppm >= 1500:
+        results["Halogen-Free"]["status"] = "Contains Halogens"
+        results["Halogen-Free"]["flags"].insert(0,
+            f"Cl: {total_cl_ppm:.0f} ppm, Br: {total_br_ppm:.0f} ppm, "
+            f"Total: {total_halogen_ppm:.0f} ppm "
+            f"(limits: Cl/Br <900 ppm, Total <1500 ppm — IEC 61249-2-21)"
+        )
+    elif total_cl_ppm > 0 or total_br_ppm > 0:
+        results["Halogen-Free"]["flags"].insert(0,
+            f"Cl: {total_cl_ppm:.0f} ppm, Br: {total_br_ppm:.0f} ppm — within limits"
+        )
+
     # --- Needs Review flag ---
     # If ANY substance has no CAS number (proprietary, blank, or unknown),
     # we can't fully certify RoHS or REACH — flag it for awareness.
@@ -222,10 +418,19 @@ def determine_compliance(substances):
         note = f"CAS number not provided for: {', '.join(unknown_cas)} — manual verification recommended"
         results["RoHS"]["flags"].append(note)
         results["REACH"]["flags"].append(note)
+        results["China RoHS"]["flags"].append(note)
+        results["TSCA"]["flags"].append(note)
+        results["Halogen-Free"]["flags"].append(note)
         # Only escalate to Needs Review if currently showing clean
         if results["RoHS"]["status"] == "Compliant":
             results["RoHS"]["status"] = "Needs Review"
         if results["REACH"]["status"] == "Compliant":
             results["REACH"]["status"] = "Needs Review"
+        if results["China RoHS"]["status"] == "Compliant":
+            results["China RoHS"]["status"] = "Needs Review"
+        if results["TSCA"]["status"] == "Compliant":
+            results["TSCA"]["status"] = "Needs Review"
+        if results["Halogen-Free"]["status"] == "Halogen-Free":
+            results["Halogen-Free"]["status"] = "Needs Review"
 
     return results

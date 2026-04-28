@@ -2,9 +2,9 @@
 {% block title %}Generate Document{% endblock %}
 
 {% macro status_badge(val) %}
-  {% if val in ['Compliant','PFAS-Free'] %}<span class="badge badge-compliant rounded-pill">{{ val }}</span>
+  {% if val in ['Compliant','PFAS-Free','Halogen-Free'] %}<span class="badge badge-compliant rounded-pill">{{ val }}</span>
   {% elif val == 'Needs Review' %}<span class="badge badge-review rounded-pill">{{ val }}</span>
-  {% elif val in ['Non-Compliant','Contains SVHC','Contains PFAS','Contains ODS'] %}<span class="badge badge-noncompliant rounded-pill">{{ val }}</span>
+  {% elif val in ['Non-Compliant','Contains SVHC','Contains PFAS','Contains ODS','Contains Prop 65 Substances','Restricted Substance Detected','Contains Halogens'] %}<span class="badge badge-noncompliant rounded-pill">{{ val }}</span>
   {% else %}<span class="badge badge-unknown rounded-pill">{{ val or '?' }}</span>
   {% endif %}
 {% endmacro %}
@@ -39,7 +39,9 @@
               <th>Part Number</th>
               <th>Description</th>
               <th class="text-center">RoHS</th>
+              <th class="text-center">China RoHS</th>
               <th class="text-center">REACH</th>
+              <th class="text-center">Prop 65</th>
               <th class="text-center">PFAS</th>
             </tr>
           </thead>
@@ -53,7 +55,9 @@
               <td class="fw-semibold text-xs">{{ p.part_number }}</td>
               <td class="text-xs text-muted">{{ (p.description or '')[:45] }}</td>
               <td class="text-center">{{ status_badge(p.rohs_status) }}</td>
+              <td class="text-center">{{ status_badge(p.china_rohs_status) }}</td>
               <td class="text-center">{{ status_badge(p.reach_status) }}</td>
+              <td class="text-center">{{ status_badge(p.prop65_status) }}</td>
               <td class="text-center">{{ status_badge(p.pfas_status) }}</td>
             </tr>
             {% endfor %}
@@ -137,10 +141,14 @@
       <div class="card-header">Standard Guide</div>
       <div class="card-body p-3" style="font-size:.8rem;">
         <div class="mb-2"><span class="fw-semibold text-primary">RoHS</span> — EU Dir. 2011/65/EU. Restricts 10 hazardous substances in electrical equipment.</div>
+        <div class="mb-2"><span class="fw-semibold text-primary">China RoHS</span> — GB/T 26572-2011. Same 6 base substances as EU RoHS for EEE sold in China.</div>
         <div class="mb-2"><span class="fw-semibold text-primary">REACH</span> — EC 1907/2006. Requires SVHC disclosure above 0.1% w/w.</div>
+        <div class="mb-2"><span class="fw-semibold text-primary">Cal Prop 65</span> — California OEHHA. ~900 listed carcinogens and reproductive toxins.</div>
+        <div class="mb-2"><span class="fw-semibold text-primary">TSCA</span> — EPA Section 6. PCBs, asbestos, TCE, and other restricted substances.</div>
+        <div class="mb-2"><span class="fw-semibold text-primary">Halogen-Free</span> — IEC 61249-2-21. Cl &lt;900 ppm, Br &lt;900 ppm, total &lt;1500 ppm.</div>
         <div class="mb-2"><span class="fw-semibold text-primary">PFAS</span> — Declaration that product does not intentionally contain per/polyfluoroalkyl substances.</div>
         <div class="mb-2"><span class="fw-semibold text-primary">Montreal Protocol</span> — ODS (ozone depleting substances) declaration.</div>
-        <div><span class="fw-semibold text-primary">Combined</span> — All four standards in one document.</div>
+        <div><span class="fw-semibold text-primary">Combined</span> — All standards in one document.</div>
       </div>
     </div>
   </div>
