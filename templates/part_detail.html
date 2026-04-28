@@ -2,9 +2,9 @@
 {% block title %}{{ part.part_number }}{% endblock %}
 
 {% macro status_badge(val) %}
-  {% if val in ['Compliant','PFAS-Free'] %}<span class="badge badge-compliant rounded-pill px-2 py-1"><i class="bi bi-check-circle me-1"></i>{{ val }}</span>
+  {% if val in ['Compliant','PFAS-Free','Halogen-Free'] %}<span class="badge badge-compliant rounded-pill px-2 py-1"><i class="bi bi-check-circle me-1"></i>{{ val }}</span>
   {% elif val == 'Needs Review' %}<span class="badge badge-review rounded-pill px-2 py-1"><i class="bi bi-exclamation-circle me-1"></i>{{ val }}</span>
-  {% elif val in ['Non-Compliant','Contains SVHC','Contains PFAS','Contains ODS'] %}<span class="badge badge-noncompliant rounded-pill px-2 py-1"><i class="bi bi-x-circle me-1"></i>{{ val }}</span>
+  {% elif val in ['Non-Compliant','Contains SVHC','Contains PFAS','Contains ODS','Contains Prop 65 Substances','Restricted Substance Detected','Contains Halogens'] %}<span class="badge badge-noncompliant rounded-pill px-2 py-1"><i class="bi bi-x-circle me-1"></i>{{ val }}</span>
   {% elif val == 'Exempt' %}<span class="badge badge-exempt rounded-pill px-2 py-1">{{ val }}</span>
   {% else %}<span class="badge badge-unknown rounded-pill px-2 py-1"><i class="bi bi-question-circle me-1"></i>{{ val or 'Unknown' }}</span>
   {% endif %}
@@ -38,9 +38,10 @@
   </div>
 </div>
 
+<!-- Top Full Width Part Details -->
 <div class="row g-3 mb-3">
   <!-- Part info -->
-  <div class="col-12 col-md-4">
+  <div class="col-12">
   <div class="card h-100">
     <div class="card-header d-flex justify-content-between align-items-center">
       <span>Part Details</span>
@@ -163,6 +164,26 @@
           </div>
 
           <div class="row mb-2">
+            <dt class="col-5 text-muted">WEEE Category</dt>
+            <dd class="col-7 mb-0">
+              <span class="read-val">{{ part.weee_category or '—' }}</span>
+              <select name="weee_category" class="edit-val form-select form-select-sm d-none">
+                <option value="">— Not assigned —</option>
+                <option value="1" {% if part.weee_category == '1' %}selected{% endif %}>Cat 1 — Temperature exchange equipment</option>
+                <option value="2" {% if part.weee_category == '2' %}selected{% endif %}>Cat 2 — Screens, monitors and displays</option>
+                <option value="3" {% if part.weee_category == '3' %}selected{% endif %}>Cat 3 — Lamps</option>
+                <option value="4" {% if part.weee_category == '4' %}selected{% endif %}>Cat 4 — Large equipment</option>
+                <option value="5" {% if part.weee_category == '5' %}selected{% endif %}>Cat 5 — Small equipment</option>
+                <option value="6" {% if part.weee_category == '6' %}selected{% endif %}>Cat 6 — Small IT and telecommunications equipment</option>
+                <option value="7" {% if part.weee_category == '7' %}selected{% endif %}>Cat 7 — Large household appliances</option>
+                <option value="8" {% if part.weee_category == '8' %}selected{% endif %}>Cat 8 — Toys, leisure and sports equipment</option>
+                <option value="9" {% if part.weee_category == '9' %}selected{% endif %}>Cat 9 — Medical devices</option>
+                <option value="10" {% if part.weee_category == '10' %}selected{% endif %}>Cat 10 — Monitoring and control instruments</option>
+              </select>
+            </dd>
+          </div>
+
+          <div class="row mb-2">
             <dt class="col-5 text-muted">BOM</dt>
             <dd class="col-7 mb-0">
               {% if part.has_bom %}
@@ -178,17 +199,24 @@
     </div>
   </div>
 </div>
+</div>
+
+<div class="row g-3 mb-3">
 
   <!-- Compliance status cards -->
   {% set standards = [
-    ('RoHS',             'rohs',     '2011/65/EU + 2015/863'),
-    ('REACH',            'reach',    'EC 1907/2006 — SVHC'),
-    ('PFAS',             'pfas',     'PFAS-Free Declaration'),
-    ('Montreal Protocol','montreal', 'ODS Declaration'),
+    ('RoHS',             'rohs',        '2011/65/EU + 2015/863'),
+    ('China RoHS',       'china_rohs',  'GB/T 26572-2011'),
+    ('REACH',            'reach',       'EC 1907/2006 — SVHC'),
+    ('Cal Prop 65',      'prop65',      'OEHHA Prop 65'),
+    ('TSCA',             'tsca',        'EPA Section 6'),
+    ('Halogen-Free',     'halogen',     'IEC 61249-2-21'),
+    ('PFAS',             'pfas',        'PFAS-Free Decl.'),
+    ('Montreal Protocol','montreal',    'ODS Declaration'),
   ] %}
   {% for std_name, key, ref in standards %}
   {% set s = status_map.get(std_name) %}
-  <div class="col-6 col-md-2">
+  <div class="col-6 col-lg-3">
     <div class="card h-100 text-center">
       <div class="card-header" style="font-size:.75rem; padding:.4rem .6rem">{{ std_name }}</div>
       <div class="card-body d-flex flex-column align-items-center justify-content-center py-3">
@@ -219,6 +247,7 @@
   </div>
   {% endfor %}
 </div>
+
 
 <!-- Compliance gaps -->
 {% if gaps %}
@@ -464,8 +493,16 @@
             <td class="text-xs fw-semibold">{{ sub.substance_name }}</td>
             <td class="text-xs text-muted font-monospace">
               {% if sub.cas_number and sub.cas_number|lower not in
-                   ['company proprietary', 'unknown', 'n/a', ''] %}
+                  ['company proprietary', 'unknown', 'n/a', ''] %}
                 {{ sub.cas_number }}
+                {% if sub.cas_override_note %}
+                  <br/>
+                  <span style="font-family:sans-serif; color:#6366f1;"
+                        title="{{ sub.cas_override_note }}">
+                    <i class="bi bi-pencil-fill" style="font-size:.65rem;"></i>
+                    Manual
+                  </span>
+                {% endif %}
               {% else %}
                 <span class="text-warning">{{ sub.cas_number or 'Not provided' }}</span>
               {% endif %}
@@ -521,8 +558,18 @@
               {% endif %}
 
               {% if not sub.cas_number or
-                   sub.cas_number|lower in ['company proprietary','unknown','n/a',''] %}
+                  sub.cas_number|lower in ['company proprietary','unknown','n/a',''] %}
                 <span class="badge badge-review rounded-pill">No CAS</span>
+                <button type="button"
+                        class="btn btn-outline-warning btn-sm py-0 px-2 ms-1"
+                        style="font-size:.7rem;"
+                        data-bs-toggle="modal"
+                        data-bs-target="#assignCasModal"
+                        data-sub-id="{{ sub.id }}"
+                        data-sub-name="{{ sub.substance_name }}"
+                        data-mat-name="{{ sub.material_name }}">
+                  <i class="bi bi-pencil me-1"></i>Assign CAS
+                </button>
               {% endif %}
             </td>
           </tr>
@@ -606,9 +653,13 @@
               <option value="Needs Review">Needs Review</option>
               <option value="Exempt">Exempt</option>
               <option value="PFAS-Free">PFAS-Free</option>
+              <option value="Halogen-Free">Halogen-Free</option>
               <option value="Contains PFAS">Contains PFAS</option>
               <option value="Contains SVHC">Contains SVHC</option>
               <option value="Contains ODS">Contains ODS</option>
+              <option value="Contains Halogens">Contains Halogens</option>
+              <option value="Contains Prop 65 Substances">Contains Prop 65 Substances</option>
+              <option value="Restricted Substance Detected">Restricted Substance Detected</option>
               <option value="Unknown">Unknown</option>
             </select>
           </div>
@@ -628,6 +679,69 @@
                   data-bs-dismiss="modal">Cancel</button>
           <button type="submit" class="btn btn-primary btn-sm">
             <i class="bi bi-check-lg me-1"></i>Save Override
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- Assign CAS Modal -->
+<div class="modal fade" id="assignCasModal" tabindex="-1"
+     aria-labelledby="assignCasModalLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header" style="background:var(--brand-dark);">
+        <h5 class="modal-title text-white" id="assignCasModalLabel">
+          <i class="bi bi-upc-scan me-2"></i>Assign CAS Number
+        </h5>
+        <button type="button" class="btn-close btn-close-white"
+                data-bs-dismiss="modal"></button>
+      </div>
+      <form method="post" id="assignCasForm" action="">
+        <div class="modal-body">
+          <div class="mb-3">
+            <label class="form-label fw-semibold small">Substance</label>
+            <input type="text" id="casSubstanceName"
+                   class="form-control form-control-sm"
+                   readonly style="background:#f8fafc;"/>
+          </div>
+          <div class="mb-3">
+            <label class="form-label fw-semibold small">Material</label>
+            <input type="text" id="casMatName"
+                   class="form-control form-control-sm"
+                   readonly style="background:#f8fafc;"/>
+          </div>
+          <div class="mb-3">
+            <label class="form-label fw-semibold small">
+              CAS Number <span class="text-danger">*</span>
+            </label>
+            <input type="text" name="cas_number"
+                   class="form-control form-control-sm"
+                   placeholder="e.g. 9011-14-7"
+                   required/>
+            <div class="form-text">Format: digits-digits-digit</div>
+          </div>
+          <div class="mb-3">
+            <label class="form-label fw-semibold small">Source / Note</label>
+            <input type="text" name="cas_override_note"
+                   class="form-control form-control-sm"
+                   placeholder="e.g. Identified as PMMA per SDS dated 2024-03"/>
+            <div class="form-text">
+              Optional — documents where this CAS came from.
+            </div>
+          </div>
+          <div class="alert alert-warning py-1 px-2 small">
+            <i class="bi bi-exclamation-triangle me-1"></i>
+            This will replace the original CAS value and immediately
+            re-run compliance determination for this part.
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary btn-sm"
+                  data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-primary btn-sm">
+            <i class="bi bi-check-circle me-1"></i>Save & Update Compliance
           </button>
         </div>
       </form>
@@ -695,7 +809,21 @@ document.getElementById('overrideModal').addEventListener('show.bs.modal', funct
   for (let opt of select.options) {
     opt.selected = opt.value === current;
   }
-});
+});                                             // ← closes overrideModal listener
+
+// Populate Assign CAS modal with substance and material name
+const assignCasModal = document.getElementById('assignCasModal');
+assignCasModal.addEventListener('show.bs.modal', function(event) {
+  const btn     = event.relatedTarget;
+  const subId   = btn.getAttribute('data-sub-id');
+  const subName = btn.getAttribute('data-sub-name');
+  const matName = btn.getAttribute('data-mat-name');
+
+  document.getElementById('casSubstanceName').value = subName;
+  document.getElementById('casMatName').value       = matName;
+  document.getElementById('assignCasForm').action   =
+    `/parts/{{ part.part_number }}/fmd/substance/${subId}/cas`;
+});                                             // ← closes assignCasModal listener
 
 // ── BOM material lookup and auto-populate ─────────────────────────────────
 let materialsCache = [];
@@ -726,7 +854,6 @@ document.getElementById('bomMaterialPart')?.addEventListener('input', function()
     document.getElementById('bomSeries').value      = match.material_series  || '';
     document.getElementById('bomRisk').value        = match.risk_level       || '';
   } else {
-    // Clear auto-populated fields if no match so user can type freely
     document.getElementById('bomDescription').value = '';
     document.getElementById('bomSupplier').value    = '';
     document.getElementById('bomSeries').value      = '';

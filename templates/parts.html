@@ -2,9 +2,9 @@
 {% block title %}Parts{% endblock %}
 
 {% macro status_badge(val) %}
-  {% if val in ['Compliant','PFAS-Free'] %}<span class="badge badge-compliant rounded-pill">{{ val }}</span>
+  {% if val in ['Compliant','PFAS-Free','Halogen-Free'] %}<span class="badge badge-compliant rounded-pill">{{ val }}</span>
   {% elif val in ['Needs Review'] %}<span class="badge badge-review rounded-pill">{{ val }}</span>
-  {% elif val in ['Non-Compliant','Contains SVHC','Contains PFAS','Contains ODS'] %}<span class="badge badge-noncompliant rounded-pill">{{ val }}</span>
+  {% elif val in ['Non-Compliant','Contains SVHC','Contains PFAS','Contains ODS','Contains Prop 65 Substances','Restricted Substance Detected','Contains Halogens'] %}<span class="badge badge-noncompliant rounded-pill">{{ val }}</span>
   {% elif val == 'Exempt' %}<span class="badge badge-exempt rounded-pill">{{ val }}</span>
   {% else %}<span class="badge badge-unknown rounded-pill">{{ val or 'Unknown' }}</span>
   {% endif %}
@@ -42,12 +42,33 @@
         </select>
       </div>
       <div class="col-6 col-md-2">
-        <select name="rohs" class="form-select form-select-sm">
-          <option value="">RoHS: All</option>
-          <option value="Compliant"     {% if rohs_f=='Compliant'     %}selected{% endif %}>Compliant</option>
-          <option value="Non-Compliant" {% if rohs_f=='Non-Compliant' %}selected{% endif %}>Non-Compliant</option>
-          <option value="Needs Review"  {% if rohs_f=='Needs Review'  %}selected{% endif %}>Needs Review</option>
-          <option value="Unknown"       {% if rohs_f=='Unknown'       %}selected{% endif %}>Unknown</option>
+        <select name="std" class="form-select form-select-sm">
+          <option value="">All Standards</option>
+          <option value="RoHS"              {% if std_f=='RoHS'              %}selected{% endif %}>RoHS</option>
+          <option value="China RoHS"        {% if std_f=='China RoHS'        %}selected{% endif %}>China RoHS</option>
+          <option value="REACH"             {% if std_f=='REACH'             %}selected{% endif %}>REACH</option>
+          <option value="Cal Prop 65"       {% if std_f=='Cal Prop 65'       %}selected{% endif %}>Cal Prop 65</option>
+          <option value="TSCA"              {% if std_f=='TSCA'              %}selected{% endif %}>TSCA</option>
+          <option value="Halogen-Free"      {% if std_f=='Halogen-Free'      %}selected{% endif %}>Halogen-Free</option>
+          <option value="PFAS"              {% if std_f=='PFAS'              %}selected{% endif %}>PFAS</option>
+          <option value="Montreal Protocol" {% if std_f=='Montreal Protocol' %}selected{% endif %}>Montreal</option>
+        </select>
+      </div>
+      <div class="col-6 col-md-2">
+        <select name="status_f" class="form-select form-select-sm">
+          <option value="">Any Status</option>
+          <option value="Compliant"                     {% if status_f=='Compliant'                     %}selected{% endif %}>Compliant</option>
+          <option value="Non-Compliant"                 {% if status_f=='Non-Compliant'                 %}selected{% endif %}>Non-Compliant</option>
+          <option value="Needs Review"                  {% if status_f=='Needs Review'                  %}selected{% endif %}>Needs Review</option>
+          <option value="Contains SVHC"                 {% if status_f=='Contains SVHC'                 %}selected{% endif %}>Contains SVHC</option>
+          <option value="Contains PFAS"                 {% if status_f=='Contains PFAS'                 %}selected{% endif %}>Contains PFAS</option>
+          <option value="Contains ODS"                  {% if status_f=='Contains ODS'                  %}selected{% endif %}>Contains ODS</option>
+          <option value="PFAS-Free"                     {% if status_f=='PFAS-Free'                     %}selected{% endif %}>PFAS-Free</option>
+          <option value="Halogen-Free"                  {% if status_f=='Halogen-Free'                  %}selected{% endif %}>Halogen-Free</option>
+          <option value="Contains Halogens"             {% if status_f=='Contains Halogens'             %}selected{% endif %}>Contains Halogens</option>
+          <option value="Contains Prop 65 Substances"   {% if status_f=='Contains Prop 65 Substances'   %}selected{% endif %}>Contains Prop 65</option>
+          <option value="Restricted Substance Detected" {% if status_f=='Restricted Substance Detected' %}selected{% endif %}>TSCA Restricted</option>
+          <option value="Unknown"                       {% if status_f=='Unknown'                       %}selected{% endif %}>Unknown</option>
         </select>
       </div>
       <div class="col-auto">
@@ -126,10 +147,7 @@
             <th>Part Number</th>
             <th>Description</th>
             <th>Class</th>
-            <th class="text-center">RoHS</th>
-            <th class="text-center">REACH</th>
-            <th class="text-center">PFAS</th>
-            <th class="text-center">Montreal</th>
+            <th class="text-center">Compliance</th>
             <th class="text-center">BOM</th>
             <th class="text-center">FMD</th>
             <th><span class="visually-hidden">Actions</span></th>
@@ -149,10 +167,7 @@
             </td>
             <td class="text-muted text-xs">{{ (p.description or '')[:45] }}{% if p.description and p.description|length > 45 %}…{% endif %}</td>
             <td class="text-xs text-muted">{{ p.part_class or '—' }}</td>
-            <td class="text-center">{{ status_badge(p.rohs_status) }}</td>
-            <td class="text-center">{{ status_badge(p.reach_status) }}</td>
-            <td class="text-center">{{ status_badge(p.pfas_status) }}</td>
-            <td class="text-center">{{ status_badge(p.montreal_status) }}</td>
+            <td class="text-center">{{ status_badge(p.worst_status) }}</td>
             <td class="text-center">
               {% if p.has_bom %}
                 <i class="bi bi-check-circle text-success"></i>
@@ -188,15 +203,15 @@
     <nav class="px-3 py-2 border-top" aria-label="Pagination">
       <ul class="pagination pagination-sm mb-0">
         {% if page > 1 %}
-        <li class="page-item"><a class="page-link" href="?page={{ page-1 }}&search={{ search }}&cls={{ cls_f }}&fmd={{ fmd_f }}&rohs={{ rohs_f }}">‹</a></li>
+        <li class="page-item"><a class="page-link" href="?page={{ page-1 }}&search={{ search }}&cls={{ cls_f }}&fmd={{ fmd_f }}&std={{ std_f }}&status_f={{ status_f }}">‹</a></li>
         {% endif %}
         {% for pg in range([1, page-2]|max, [total_pages+1, page+3]|min) %}
         <li class="page-item {% if pg==page %}active{% endif %}">
-          <a class="page-link" href="?page={{ pg }}&search={{ search }}&cls={{ cls_f }}&fmd={{ fmd_f }}&rohs={{ rohs_f }}">{{ pg }}</a>
+          <a class="page-link" href="?page={{ pg }}&search={{ search }}&cls={{ cls_f }}&fmd={{ fmd_f }}&std={{ std_f }}&status_f={{ status_f }}">{{ pg }}</a>
         </li>
         {% endfor %}
         {% if page < total_pages %}
-        <li class="page-item"><a class="page-link" href="?page={{ page+1 }}&search={{ search }}&cls={{ cls_f }}&fmd={{ fmd_f }}&rohs={{ rohs_f }}">›</a></li>
+        <li class="page-item"><a class="page-link" href="?page={{ page+1 }}&search={{ search }}&cls={{ cls_f }}&fmd={{ fmd_f }}&std={{ std_f }}&status_f={{ status_f }}">›</a></li>
         {% endif %}
       </ul>
     </nav>
@@ -206,7 +221,7 @@
     <div class="text-center py-5 text-muted">
       <i class="bi bi-boxes fs-1 d-block mb-2 opacity-25"></i>
       No parts found.
-      {% if search or cls_f or fmd_f or rohs_f %}<a href="/parts">Clear filters</a>{% else %}<a href="/import">Import parts to get started.</a>{% endif %}
+      {% if search or cls_f or fmd_f or std_f or status_f %}<a href="/parts">Clear filters</a>{% else %}<a href="/import">Import parts to get started.</a>{% endif %}
     </div>
     {% endif %}
   </div>

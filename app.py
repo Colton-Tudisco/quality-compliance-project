@@ -12,7 +12,7 @@ from flask import (Flask, render_template, request, redirect, url_for,
                    flash, send_file, jsonify)
 from pdf_generator import generate_compliance_pdf
 from fmd_parser import parse_fmd_pdf
-from compliance_engine import determine_compliance
+from compliance_engine import determine_compliance, SVHC_CAS
 
 BASE_DIR  = os.path.dirname(os.path.abspath(__file__))
 DB_PATH   = os.path.join(BASE_DIR, "comply.db")
@@ -99,7 +99,8 @@ def init_db():
             created_at      TEXT DEFAULT (datetime('now')),
             updated_at      TEXT DEFAULT (datetime('now')),
             is_hidden       INTEGER DEFAULT 0,
-            notes           TEXT
+            notes           TEXT,
+            weee_category   TEXT
         );
 
         CREATE TABLE IF NOT EXISTS materials (
@@ -253,6 +254,21 @@ def init_db():
     """)
 
     conn.commit()
+
+    # Safe migration: add weee_category column to existing databases
+    existing_cols = [r[1] for r in conn.execute("PRAGMA table_info(parts)").fetchall()]
+    if "weee_category" not in existing_cols:
+        conn.execute("ALTER TABLE parts ADD COLUMN weee_category TEXT")
+        conn.commit()
+
+    # CAS manual assignment note for fmd_substances
+    fmd_cols = [r[1] for r in conn.execute(
+        "PRAGMA table_info(fmd_substances)").fetchall()]
+    if "cas_override_note" not in fmd_cols:
+        conn.execute(
+            "ALTER TABLE fmd_substances ADD COLUMN cas_override_note TEXT")
+        conn.commit()
+
     # Seed default reference data if not already present
     defaults = [
         ("part_class",    "Finished Goods"),
@@ -277,6 +293,12 @@ def init_db():
         ("REACH SVHC",       "January 2025",             "2025-01-21", "247 substances on candidate list. 5 new substances added including octamethyltrisiloxane and perfluamine."),
         ("PFAS",             "OECD Definition — 2021",   "2021-01-01", "Based on OECD/EPA broad PFAS definition. CAS-based and name-based detection."),
         ("Montreal Protocol","2019 Kigali Amendment",    "2019-01-01", "Covers Annex A/B/C/E ODS substances including CFCs, HCFCs, and Halons."),
+        ("Cal Prop 65",      "OEHHA June 2024",          "2024-06-28", "~900 listed substances. CAS-based detection against common electronics/industrial subset."),
+        ("China RoHS",       "GB/T 26572-2011",          "2011-02-01", "6 restricted substances for EEE products sold in the China market."),
+        ("TSCA",             "EPA Section 6 — 2024",     "2024-01-01", "Includes asbestos final rule (2024) and PCB prohibition. CAS-based detection."),
+        ("Halogen-Free",     "IEC 61249-2-21 / JESD97",  "2024-01-01", "Cl<900 ppm, Br<900 ppm, Total halogens<1500 ppm in homogeneous material."),
+        ("WEEE",             "2012/19/EU",               "2012-07-04", "Product category 1-10 attribute. Not a substance check — tracked per part."),
+        ("SCIP",             "ECHA Regulation 2020",     "2021-01-05", "Derived from REACH/SVHC data. Submission export for ECHA SCIP database."),
     ]
     for standard, version, updated_at, notes in regulatory_defaults:
         conn.execute("""
@@ -347,6 +369,10 @@ def assess_part_compliance(part_number, conn):
         "REACH":            "Compliant",
         "PFAS":             "PFAS-Free",
         "Montreal Protocol":"Compliant",
+        "Cal Prop 65":      "Compliant",
+        "China RoHS":       "Compliant",
+        "TSCA":             "Compliant",
+        "Halogen-Free":     "Halogen-Free",
     }
     reasons = {s: [] for s in standards}
 
@@ -376,7 +402,8 @@ def get_compliance_gaps(part_number, conn):
     status_map = {r["standard"]: r for r in statuses}
 
     gaps = []
-    standards = ["RoHS", "REACH", "PFAS", "Montreal Protocol"]
+    standards = ["RoHS", "China RoHS", "REACH", "Cal Prop 65", "TSCA",
+                 "Halogen-Free", "PFAS", "Montreal Protocol"]
     for std in standards:
         s = status_map.get(std)
         if not s or s["status"] in ("Unknown", "Needs Review"):
@@ -386,12 +413,14 @@ def get_compliance_gaps(part_number, conn):
                 "suggested": False,
                 "reason": "Status unconfirmed — material review needed"
             })
-        elif s["status"] in ("Contains PFAS", "Contains SVHC", "Contains ODS"):
+        elif s["status"] in ("Contains PFAS", "Contains SVHC", "Contains ODS",
+                             "Contains Prop 65 Substances", "Restricted Substance Detected",
+                             "Contains Halogens", "Non-Compliant"):
             gaps.append({
                 "standard": std,
                 "required": True,
                 "suggested": False,
-                "reason": f"Non-compliant material detected — declaration required"
+                "reason": "Non-compliant material detected — declaration required"
             })
     # Suggested: third-party test report if any high-risk materials
     has_high = conn.execute("""
@@ -644,10 +673,27 @@ def dashboard():
 
         return counts
 
-    rohs_counts     = std_counts("RoHS")
-    reach_counts    = std_counts("REACH")
-    pfas_counts     = std_counts("PFAS")
-    montreal_counts = std_counts("Montreal Protocol")
+    rohs_counts       = std_counts("RoHS")
+    reach_counts      = std_counts("REACH")
+    pfas_counts       = std_counts("PFAS")
+    montreal_counts   = std_counts("Montreal Protocol")
+    prop65_counts     = std_counts("Cal Prop 65")
+    china_rohs_counts = std_counts("China RoHS")
+    tsca_counts       = std_counts("TSCA")
+    halogen_counts    = std_counts("Halogen-Free")
+
+    weee_categorized = conn.execute("""
+        SELECT COUNT(*) FROM parts
+        WHERE is_active=1 AND is_traded=0 AND is_hidden=0
+        AND weee_category IS NOT NULL AND weee_category != ''
+    """).fetchone()[0]
+
+    scip_notifiable = conn.execute("""
+        SELECT COUNT(*) FROM compliance_status cs
+        JOIN parts p ON p.part_number = cs.part_number
+        WHERE cs.standard='REACH' AND cs.status='Contains SVHC'
+        AND p.is_active=1 AND p.is_traded=0 AND p.is_hidden=0
+    """).fetchone()[0]
 
     # Parts needing attention (any Unknown/Needs Review)
     needs_attention = conn.execute("""
@@ -704,6 +750,9 @@ def dashboard():
         total_materials=total_materials, total_docs=total_docs,
         rohs_counts=rohs_counts, reach_counts=reach_counts,
         pfas_counts=pfas_counts, montreal_counts=montreal_counts,
+        prop65_counts=prop65_counts, china_rohs_counts=china_rohs_counts,
+        tsca_counts=tsca_counts, halogen_counts=halogen_counts,
+        weee_categorized=weee_categorized, scip_notifiable=scip_notifiable,
         needs_attention=needs_attention, high_risk_mats=high_risk_mats,
         pfas_mats=pfas_mats, recent_docs=recent_docs,
         last_import=last_import, parts_with_fmd=parts_with_fmd,
@@ -720,7 +769,8 @@ def parts_list():
     search   = request.args.get("search","").strip()
     cls_f    = request.args.get("cls", "")
     fmd_f    = request.args.get("fmd", "")
-    rohs_f   = request.args.get("rohs", "")
+    std_f    = request.args.get("std", "")
+    status_f = request.args.get("status_f", "")
     page     = int(request.args.get("page", 1))
     per_page = 50
 
@@ -734,7 +784,18 @@ def parts_list():
         (SELECT cs.status FROM compliance_status cs
          WHERE cs.part_number=p.part_number AND cs.standard='Montreal Protocol' LIMIT 1) as montreal_status,
         (SELECT COUNT(*) FROM fmd_files f
-         WHERE f.part_number=p.part_number) as has_fmd
+         WHERE f.part_number=p.part_number) as has_fmd,
+        (CASE
+          WHEN EXISTS (SELECT 1 FROM compliance_status cs WHERE cs.part_number=p.part_number
+            AND cs.status IN ('Non-Compliant','Contains SVHC','Contains PFAS','Contains ODS',
+                              'Contains Prop 65 Substances','Restricted Substance Detected','Contains Halogens'))
+            THEN 'Non-Compliant'
+          WHEN EXISTS (SELECT 1 FROM compliance_status cs WHERE cs.part_number=p.part_number
+            AND cs.status = 'Needs Review') THEN 'Needs Review'
+          WHEN NOT EXISTS (SELECT 1 FROM compliance_status cs WHERE cs.part_number=p.part_number)
+            THEN 'Unknown'
+          ELSE 'Compliant'
+        END) as worst_status
         FROM parts p WHERE p.is_traded=0 AND p.is_active=1 AND p.is_hidden=0"""
     params = []
 
@@ -748,15 +809,17 @@ def parts_list():
         query += " AND (SELECT COUNT(*) FROM fmd_files f WHERE f.part_number=p.part_number) > 0"
     elif fmd_f == "no":
         query += " AND (SELECT COUNT(*) FROM fmd_files f WHERE f.part_number=p.part_number) = 0"
-    if rohs_f:
-        if rohs_f == "Unknown":
-            query += " AND (SELECT cs.status FROM compliance_status cs WHERE cs.part_number=p.part_number AND cs.standard='RoHS' LIMIT 1) IS NULL"
+    if std_f and status_f:
+        if status_f == "Unknown":
+            query += (" AND (SELECT cs.status FROM compliance_status cs"
+                      " WHERE cs.part_number=p.part_number AND cs.standard=? LIMIT 1) IS NULL")
+            params.append(std_f)
         else:
-            query += " AND (SELECT cs.status FROM compliance_status cs WHERE cs.part_number=p.part_number AND cs.standard='RoHS' LIMIT 1) = ?"
-            params.append(rohs_f)
+            query += (" AND (SELECT cs.status FROM compliance_status cs"
+                      " WHERE cs.part_number=p.part_number AND cs.standard=? LIMIT 1) = ?")
+            params += [std_f, status_f]
 
-    # Count query is kept separate and simple — no compliance subqueries needed,
-    # just count rows matching the same base filters
+    # Count query — same filters, no compliance subqueries for performance
     count_q = "SELECT COUNT(*) FROM parts p WHERE p.is_traded=0 AND p.is_active=1 AND p.is_hidden=0"
     count_params = []
     if search:
@@ -769,12 +832,15 @@ def parts_list():
         count_q += " AND (SELECT COUNT(*) FROM fmd_files f WHERE f.part_number=p.part_number) > 0"
     elif fmd_f == "no":
         count_q += " AND (SELECT COUNT(*) FROM fmd_files f WHERE f.part_number=p.part_number) = 0"
-    if rohs_f:
-        if rohs_f == "Unknown":
-            count_q += " AND (SELECT cs.status FROM compliance_status cs WHERE cs.part_number=p.part_number AND cs.standard='RoHS' LIMIT 1) IS NULL"
+    if std_f and status_f:
+        if status_f == "Unknown":
+            count_q += (" AND (SELECT cs.status FROM compliance_status cs"
+                        " WHERE cs.part_number=p.part_number AND cs.standard=? LIMIT 1) IS NULL")
+            count_params.append(std_f)
         else:
-            count_q += " AND (SELECT cs.status FROM compliance_status cs WHERE cs.part_number=p.part_number AND cs.standard='RoHS' LIMIT 1) = ?"
-            count_params.append(rohs_f)
+            count_q += (" AND (SELECT cs.status FROM compliance_status cs"
+                        " WHERE cs.part_number=p.part_number AND cs.standard=? LIMIT 1) = ?")
+            count_params += [std_f, status_f]
 
     conn = get_db()
     total_count = conn.execute(count_q, count_params).fetchone()[0]
@@ -790,7 +856,7 @@ def parts_list():
 
     total_pages = (total_count + per_page - 1) // per_page
     return render_template("parts.html", parts=parts, search=search,
-                       cls_f=cls_f, fmd_f=fmd_f, rohs_f=rohs_f,
+                       cls_f=cls_f, fmd_f=fmd_f, std_f=std_f, status_f=status_f,
                        classes=classes, page=page,
                        total_pages=total_pages, total_count=total_count)
 
@@ -1107,6 +1173,7 @@ def edit_part(part_number):
     commodity_code    = request.form.get("commodity_code", "").strip()
     traded_vendor     = request.form.get("traded_vendor", "").strip()
     notes             = request.form.get("notes", "").strip()
+    weee_category     = request.form.get("weee_category", "").strip()
 
     if not new_part_number:
         flash("Part number cannot be empty.", "danger")
@@ -1149,12 +1216,14 @@ def edit_part(part_number):
             commodity_code = ?,
             traded_vendor  = ?,
             notes          = ?,
+            weee_category  = ?,
             updated_at     = datetime('now')
         WHERE part_number = ?
     """, (
         new_part_number, description, part_class, part_type,
         product_group, uom, commodity_code,
-        traded_vendor or None, notes or None, part_number
+        traded_vendor or None, notes or None,
+        weee_category or None, part_number
     ))
 
     conn.commit()
@@ -1263,7 +1332,8 @@ def part_detail(part_number):
 
      # Parsed substances from FMD
     fmd_substances = conn.execute("""
-        SELECT material_name, substance_name, cas_number,
+        SELECT id, material_name, substance_name, cas_number,
+               cas_override_note,
                substance_weight, substance_weight_uom,
                weight_on_hm_pct, weight_on_total_pct, hm_on_total_pct
         FROM fmd_substances
@@ -1564,6 +1634,59 @@ def upload_fmd(part_number):
     )
     return redirect(url_for("part_detail", part_number=part_number))
 
+@app.route("/parts/<path:part_number>/fmd/substance/<int:sub_id>/cas",
+           methods=["POST"])
+def assign_cas(part_number, sub_id):
+    cas      = request.form.get("cas_number", "").strip()
+    note     = request.form.get("cas_override_note", "").strip()
+
+    # Basic CAS format validation: digits-digits-digit (e.g. 7439-92-1)
+    import re
+    if not re.match(r"^\d{2,7}-\d{2}-\d$", cas):
+        flash("Invalid CAS format. Expected format: 7439-92-1", "danger")
+        return redirect(url_for("part_detail", part_number=part_number))
+
+    conn = get_db()
+
+    # Update the substance row directly
+    conn.execute("""
+        UPDATE fmd_substances
+        SET cas_number = ?, cas_override_note = ?
+        WHERE id = ? AND part_number = ?
+    """, (cas, note or None, sub_id, part_number))
+    conn.commit()
+
+    # Re-run compliance determination using updated substance data
+    rows = conn.execute("""
+        SELECT cas_number, substance_name, material_name,
+               weight_on_hm_pct, weight_on_total_pct
+        FROM fmd_substances
+        WHERE part_number = ?
+    """, (part_number,)).fetchall()
+
+    all_substances = [dict(r) for r in rows]
+
+    if all_substances:
+        compliance_results = determine_compliance(all_substances)
+        for standard, result in compliance_results.items():
+            notes = "; ".join(result["flags"]) if result["flags"] else None
+            conn.execute("""
+                INSERT INTO compliance_status
+                    (part_number, standard, status, notes, last_assessed)
+                VALUES (?, ?, ?, ?, datetime('now'))
+                ON CONFLICT(part_number, standard)
+                DO UPDATE SET status        = excluded.status,
+                              notes         = excluded.notes,
+                              last_assessed = excluded.last_assessed
+            """, (part_number, standard, result["status"], notes))
+        conn.commit()
+
+    conn.close()
+    flash(
+        f"CAS number {cas} assigned and compliance status updated.",
+        "success"
+    )
+    return redirect(url_for("part_detail", part_number=part_number))
 
 @app.route("/parts/<path:part_number>/fmd/download")
 def download_fmd(part_number):
@@ -2052,7 +2175,8 @@ def _auto_assess_part(part_number, conn):
 # Document Generation
 # ---------------------------------------------------------------------------
 
-DOC_TYPES = ["RoHS", "REACH", "PFAS", "Montreal Protocol", "Combined (All Standards)"]
+DOC_TYPES = ["RoHS", "China RoHS", "REACH", "Cal Prop 65", "TSCA",
+             "Halogen-Free", "PFAS", "Montreal Protocol", "Combined (All Standards)"]
 
 
 @app.route("/documents/generate", methods=["GET","POST"])
@@ -2175,13 +2299,71 @@ def generate_document():
             (SELECT cs.status FROM compliance_status cs WHERE cs.part_number=p.part_number AND cs.standard='RoHS' LIMIT 1) as rohs_status,
             (SELECT cs.status FROM compliance_status cs WHERE cs.part_number=p.part_number AND cs.standard='REACH' LIMIT 1) as reach_status,
             (SELECT cs.status FROM compliance_status cs WHERE cs.part_number=p.part_number AND cs.standard='PFAS' LIMIT 1) as pfas_status,
-            (SELECT cs.status FROM compliance_status cs WHERE cs.part_number=p.part_number AND cs.standard='Montreal Protocol' LIMIT 1) as montreal_status
+            (SELECT cs.status FROM compliance_status cs WHERE cs.part_number=p.part_number AND cs.standard='Montreal Protocol' LIMIT 1) as montreal_status,
+            (SELECT cs.status FROM compliance_status cs WHERE cs.part_number=p.part_number AND cs.standard='China RoHS' LIMIT 1) as china_rohs_status,
+            (SELECT cs.status FROM compliance_status cs WHERE cs.part_number=p.part_number AND cs.standard='Cal Prop 65' LIMIT 1) as prop65_status
         FROM parts p
         WHERE p.is_traded=0 AND p.is_active=1 AND p.is_hidden=0
         ORDER BY p.part_number
     """).fetchall()
     conn.close()
     return render_template("generate_document.html", parts=parts, doc_types=DOC_TYPES)
+
+
+@app.route("/api/scip-export")
+def scip_export():
+    """SCIP Article Notification export — JSON format per ECHA SCIP requirements."""
+    import json
+    conn = get_db()
+
+    rows = conn.execute("""
+        SELECT p.part_number, p.description, p.commodity_code,
+               cs.status, cs.last_assessed
+        FROM parts p
+        JOIN compliance_status cs ON cs.part_number = p.part_number
+        WHERE cs.standard = 'REACH'
+          AND cs.status = 'Contains SVHC'
+          AND p.is_active = 1 AND p.is_traded = 0 AND p.is_hidden = 0
+        ORDER BY p.part_number
+    """).fetchall()
+
+    svhc_cas_list = tuple(SVHC_CAS.keys())
+    articles = []
+    for r in rows:
+        placeholders = ",".join("?" * len(svhc_cas_list))
+        svhc_subs = conn.execute(f"""
+            SELECT substance_name, cas_number, weight_on_total_pct
+            FROM fmd_substances
+            WHERE part_number = ?
+              AND cas_number IN ({placeholders})
+              AND weight_on_total_pct > 0.1
+        """, (r["part_number"], *svhc_cas_list)).fetchall()
+
+        articles.append({
+            "articleId":                    r["part_number"],
+            "articleName":                  r["description"] or "",
+            "primaryArticleIdentifierType": "InternalPartNumber",
+            "harmonisedCommodityCode":      r["commodity_code"] or "",
+            "assessmentDate":               (r["last_assessed"] or "")[:10],
+            "svhcSubstances": [
+                {
+                    "substanceName":    s["substance_name"],
+                    "casNumber":        s["cas_number"],
+                    "concentrationPct": s["weight_on_total_pct"],
+                }
+                for s in svhc_subs
+            ],
+        })
+
+    conn.close()
+    output = json.dumps({"scipArticleNotifications": articles}, indent=2)
+    filename = f"scip_export_{datetime.now().strftime('%Y%m%d')}.json"
+    return send_file(
+        io.BytesIO(output.encode("utf-8")),
+        mimetype="application/json",
+        as_attachment=True,
+        download_name=filename,
+    )
 
 
 @app.route("/documents")
