@@ -261,6 +261,14 @@ def init_db():
         conn.execute("ALTER TABLE parts ADD COLUMN weee_category TEXT")
         conn.commit()
 
+    # CAS manual assignment note for fmd_substances
+    fmd_cols = [r[1] for r in conn.execute(
+        "PRAGMA table_info(fmd_substances)").fetchall()]
+    if "cas_override_note" not in fmd_cols:
+        conn.execute(
+            "ALTER TABLE fmd_substances ADD COLUMN cas_override_note TEXT")
+        conn.commit()
+
     # Seed default reference data if not already present
     defaults = [
         ("part_class",    "Finished Goods"),
@@ -1324,7 +1332,8 @@ def part_detail(part_number):
 
      # Parsed substances from FMD
     fmd_substances = conn.execute("""
-        SELECT material_name, substance_name, cas_number,
+        SELECT id, material_name, substance_name, cas_number,
+               cas_override_note,
                substance_weight, substance_weight_uom,
                weight_on_hm_pct, weight_on_total_pct, hm_on_total_pct
         FROM fmd_substances
@@ -1625,6 +1634,59 @@ def upload_fmd(part_number):
     )
     return redirect(url_for("part_detail", part_number=part_number))
 
+@app.route("/parts/<path:part_number>/fmd/substance/<int:sub_id>/cas",
+           methods=["POST"])
+def assign_cas(part_number, sub_id):
+    cas      = request.form.get("cas_number", "").strip()
+    note     = request.form.get("cas_override_note", "").strip()
+
+    # Basic CAS format validation: digits-digits-digit (e.g. 7439-92-1)
+    import re
+    if not re.match(r"^\d{2,7}-\d{2}-\d$", cas):
+        flash("Invalid CAS format. Expected format: 7439-92-1", "danger")
+        return redirect(url_for("part_detail", part_number=part_number))
+
+    conn = get_db()
+
+    # Update the substance row directly
+    conn.execute("""
+        UPDATE fmd_substances
+        SET cas_number = ?, cas_override_note = ?
+        WHERE id = ? AND part_number = ?
+    """, (cas, note or None, sub_id, part_number))
+    conn.commit()
+
+    # Re-run compliance determination using updated substance data
+    rows = conn.execute("""
+        SELECT cas_number, substance_name, material_name,
+               weight_on_hm_pct, weight_on_total_pct
+        FROM fmd_substances
+        WHERE part_number = ?
+    """, (part_number,)).fetchall()
+
+    all_substances = [dict(r) for r in rows]
+
+    if all_substances:
+        compliance_results = determine_compliance(all_substances)
+        for standard, result in compliance_results.items():
+            notes = "; ".join(result["flags"]) if result["flags"] else None
+            conn.execute("""
+                INSERT INTO compliance_status
+                    (part_number, standard, status, notes, last_assessed)
+                VALUES (?, ?, ?, ?, datetime('now'))
+                ON CONFLICT(part_number, standard)
+                DO UPDATE SET status        = excluded.status,
+                              notes         = excluded.notes,
+                              last_assessed = excluded.last_assessed
+            """, (part_number, standard, result["status"], notes))
+        conn.commit()
+
+    conn.close()
+    flash(
+        f"CAS number {cas} assigned and compliance status updated.",
+        "success"
+    )
+    return redirect(url_for("part_detail", part_number=part_number))
 
 @app.route("/parts/<path:part_number>/fmd/download")
 def download_fmd(part_number):
